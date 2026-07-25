@@ -163,12 +163,13 @@ select:focus { border-color:var(--orange); }
 .d-fatigue{background:#1E0A00;border-color:#3A1500} .d-fatigue .dt{color:var(--orange-hi)}
 .d-long{background:#200800;border-color:#5A1A00} .d-long .dt{color:var(--orange)}
 
-.zrow{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--gravel);font-size:13px}
+.zrow{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--gravel);font-size:12px}
 .zrow:last-child{border-bottom:none}
 .zdot{width:11px;height:11px;border-radius:2px;flex-shrink:0}
-.zname{font-weight:600;width:130px;font-size:12px}
-.zrange{flex:1;color:var(--fog);font-size:12px}
-.znote{font-size:11px;color:var(--mist);text-align:right}
+.zname{font-weight:600;width:120px;font-size:12px;flex-shrink:0}
+.zrange{width:110px;color:var(--fog);font-size:12px;flex-shrink:0}
+.zhr{width:110px;color:var(--mist);font-size:12px;flex-shrink:0}
+.znote{flex:1;font-size:11px;color:var(--mist);text-align:right}
 
 .chat-msgs{flex:1;overflow-y:auto;padding:1.25rem;display:flex;flex-direction:column;gap:12px;max-width:720px;margin:0 auto;width:100%}
 .msg{display:flex;gap:10px;align-items:flex-start;max-width:85%}
@@ -533,12 +534,20 @@ select:focus { border-color:var(--orange); }
     <div class="box box-yellow" id="zones-note">Sync your Strava and complete onboarding to see your personalised training zones.</div>
     <p class="slabel">Training zones</p>
     <div id="zones-content">
-      <div class="zrow"><div class="zdot" style="background:#4CAF7D"></div><div class="zname">Z1 — Recovery</div><div class="zrange" id="z1-range">—</div><div class="znote">Easy spin</div></div>
-      <div class="zrow"><div class="zdot" style="background:#2D9B6A"></div><div class="zname">Z2 — Endurance</div><div class="zrange" id="z2-range">—</div><div class="znote">Long rides</div></div>
-      <div class="zrow"><div class="zdot" style="background:#E8C30A"></div><div class="zname">Z3 — Tempo</div><div class="zrange" id="z3-range">—</div><div class="znote">Sustained effort</div></div>
-      <div class="zrow"><div class="zdot" style="background:#E8A20A"></div><div class="zname">Z4 — Threshold</div><div class="zrange" id="z4-range">—</div><div class="znote">Hard intervals</div></div>
-      <div class="zrow"><div class="zdot" style="background:#E86040"></div><div class="zname">Z5 — VO2max</div><div class="zrange" id="z5-range">—</div><div class="znote">Short hard efforts</div></div>
-      <div class="zrow"><div class="zdot" style="background:#E84040"></div><div class="zname">Z6 — Anaerobic</div><div class="zrange" id="z6-range">—</div><div class="znote">Sprints</div></div>
+      <!-- Header row -->
+      <div style="display:flex;gap:8px;padding:6px 0 8px;border-bottom:1px solid var(--gravel);margin-bottom:2px">
+        <div style="width:11px;flex-shrink:0"></div>
+        <div style="width:120px;flex-shrink:0;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--mist)">Zone</div>
+        <div style="width:110px;flex-shrink:0;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--mist)">Power</div>
+        <div style="width:110px;flex-shrink:0;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--mist)">Heart rate</div>
+        <div style="flex:1;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--mist);text-align:right">When to use</div>
+      </div>
+      <div class="zrow"><div class="zdot" style="background:#4CAF7D"></div><div class="zname">Z1 — Recovery</div><div class="zrange" id="z1-range">—</div><div class="zhr" id="z1-hr">—</div><div class="znote">Easy spin / warm-up</div></div>
+      <div class="zrow"><div class="zdot" style="background:#2D9B6A"></div><div class="zname">Z2 — Endurance</div><div class="zrange" id="z2-range">—</div><div class="zhr" id="z2-hr">—</div><div class="znote">Long rides / base</div></div>
+      <div class="zrow"><div class="zdot" style="background:#E8C30A"></div><div class="zname">Z3 — Tempo</div><div class="zrange" id="z3-range">—</div><div class="zhr" id="z3-hr">—</div><div class="znote">Sustained hard effort</div></div>
+      <div class="zrow"><div class="zdot" style="background:#E8A20A"></div><div class="zname">Z4 — Threshold</div><div class="zrange" id="z4-range">—</div><div class="zhr" id="z4-hr">—</div><div class="znote">Intervals / FTP work</div></div>
+      <div class="zrow"><div class="zdot" style="background:#E86040"></div><div class="zname">Z5 — VO2max</div><div class="zrange" id="z5-range">—</div><div class="zhr" id="z5-hr">—</div><div class="znote">Short hard efforts</div></div>
+      <div class="zrow"><div class="zdot" style="background:#E84040"></div><div class="zname">Z6 — Anaerobic</div><div class="zrange" id="z6-range">—</div><div class="zhr" id="z6-hr">—</div><div class="znote">Sprints / attacks</div></div>
     </div>
   </div>
 
@@ -1090,21 +1099,43 @@ function updateZones() {
   const weight = userProfile?.weight || 80;
   if (!ftp) return;
 
-  const zones = [
-    { id: 'z1', lo: 0, hi: Math.round(ftp * 0.55) },
-    { id: 'z2', lo: Math.round(ftp * 0.56), hi: Math.round(ftp * 0.75) },
-    { id: 'z3', lo: Math.round(ftp * 0.76), hi: Math.round(ftp * 0.90) },
-    { id: 'z4', lo: Math.round(ftp * 0.91), hi: Math.round(ftp * 1.05) },
-    { id: 'z5', lo: Math.round(ftp * 1.06), hi: Math.round(ftp * 1.20) },
-    { id: 'z6', lo: Math.round(ftp * 1.21), hi: null },
+  // Estimate max HR from FTP (calibrated: FTP = maxHR * 1.22)
+  // Also use max HR from Strava data if available
+  const stravaMaxHR = parseInt(document.getElementById('d-ftp-sub')?.textContent?.match(/max HR (\d+)/)?.[1]) || 0;
+  const estMaxHR = stravaMaxHR || Math.round(ftp / 1.22);
+
+  const powerZones = [
+    { id: 'z1', pLo: 0,              pHi: Math.round(ftp * 0.55) },
+    { id: 'z2', pLo: Math.round(ftp * 0.56), pHi: Math.round(ftp * 0.75) },
+    { id: 'z3', pLo: Math.round(ftp * 0.76), pHi: Math.round(ftp * 0.90) },
+    { id: 'z4', pLo: Math.round(ftp * 0.91), pHi: Math.round(ftp * 1.05) },
+    { id: 'z5', pLo: Math.round(ftp * 1.06), pHi: Math.round(ftp * 1.20) },
+    { id: 'z6', pLo: Math.round(ftp * 1.21), pHi: null },
   ];
 
-  zones.forEach(z => {
+  const hrZones = [
+    { id: 'z1', hLo: 0,                          hHi: Math.round(estMaxHR * 0.60) },
+    { id: 'z2', hLo: Math.round(estMaxHR * 0.61), hHi: Math.round(estMaxHR * 0.72) },
+    { id: 'z3', hLo: Math.round(estMaxHR * 0.73), hHi: Math.round(estMaxHR * 0.83) },
+    { id: 'z4', hLo: Math.round(estMaxHR * 0.84), hHi: Math.round(estMaxHR * 0.94) },
+    { id: 'z5', hLo: Math.round(estMaxHR * 0.95), hHi: Math.round(estMaxHR * 1.00) },
+    { id: 'z6', hLo: Math.round(estMaxHR * 1.00), hHi: null },
+  ];
+
+  powerZones.forEach(z => {
     const el = document.getElementById(z.id + '-range');
-    if (el) el.textContent = z.hi ? `${z.lo}–${z.hi} W` : `>${z.lo} W`;
+    if (el) el.textContent = z.pHi ? z.pLo + '–' + z.pHi + ' W' : '>' + z.pLo + ' W';
   });
 
-  document.getElementById('zones-note').innerHTML = `<strong>Based on your FTP of ${ftp}W (${(ftp/weight).toFixed(2)} W/kg at ${weight}kg).</strong> Update your FTP in My Goal after completing a 20-min test effort.`;
+  hrZones.forEach(z => {
+    const el = document.getElementById(z.id + '-hr');
+    if (el) el.textContent = z.hHi ? z.hLo + '–' + z.hHi + ' bpm' : '>' + z.hLo + ' bpm';
+  });
+
+  document.getElementById('zones-note').innerHTML =
+    '<strong>Based on FTP ' + ftp + 'W (' + (ftp/weight).toFixed(2) + ' W/kg at ' + weight + 'kg)</strong> · ' +
+    'Est. max HR ' + estMaxHR + ' bpm. ' +
+    'Update your FTP in Profile after a 20-min test effort for more accurate zones.';
 }
 
 function updateCoachWelcome() {
