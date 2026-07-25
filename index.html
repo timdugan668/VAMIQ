@@ -431,18 +431,12 @@ select:focus { border-color:var(--orange); }
     <!-- Step 4: Connect Strava -->
     <div id="step-4" style="display:none">
       <div class="onboard-title">Connect Strava</div>
-      <div class="onboard-desc">VAMIQ analyses your rides to personalise your training plan. Click Connect, authorise on Strava, then copy the code from your browser address bar and paste it below.</div>
+      <div class="onboard-desc">VAMIQ analyses your rides to personalise your training plan. Click Connect Strava and authorise — you'll be brought straight back here automatically.</div>
       <button class="strava-connect" onclick="connectStrava()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
-        1. Connect Strava
+        Connect Strava
       </button>
-      <div class="field" style="margin-top:1rem">
-        <label>2. Paste the code from your browser address bar</label>
-        <input type="text" id="strava-code" placeholder="Paste code=XXXXXXXX from the URL here" />
-        <div class="field-hint">After authorising, your browser shows a broken page — copy the code= value from the address bar and paste it above</div>
-      </div>
-      <button class="btn-next" onclick="submitStravaCode()" style="margin-bottom:8px">3. Connect my rides →</button>
-      <button class="skip-btn" onclick="skipStrava()">Skip for now — I'll connect later</button>
+      <button class="skip-btn" onclick="skipStrava()" style="margin-top:0.5rem">Skip for now — I'll connect later</button>
     </div>
   </div>
 </div>
@@ -873,9 +867,9 @@ function selectGoal(goal) {
 
 function connectStrava() {
   const clientId = '263268';
-  const redirectUri = encodeURIComponent('http://localhost');
+  const redirectUri = encodeURIComponent(window.location.origin + '/api/strava-callback');
   const url = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=activity:read_all`;
-  window.open(url, '_blank');
+  window.location.href = url;
 }
 
 async function skipStrava() {
@@ -1126,11 +1120,9 @@ function editGoal() { showScreen('onboarding'); nextStep(2); }
 
 function reconnectStrava() {
   const clientId = '263268';
-  const redirectUri = encodeURIComponent('http://localhost');
+  const redirectUri = encodeURIComponent(window.location.origin + '/api/strava-callback');
   const url = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=activity:read_all`;
-  window.open(url, '_blank');
-  // Show instruction
-  alert('1. Authorise on Strava\n2. Copy the full URL from the broken page\n3. Come back here and go to Profile → paste the code in the box below to reconnect');
+  window.location.href = url;
 }
 
 function loadProfileTab() {
@@ -1373,7 +1365,7 @@ ATHLETE PROFILE:
 - Experience: ${p.experience||'unknown'}
 - FTP: ${p.ftp||'unknown'}W${p.ftp&&p.weight?' ('+( p.ftp/p.weight).toFixed(2)+' W/kg)':''}
 - Power meter: ${p.has_power_meter||'unknown'}
-- Training hours/week: ${p.hours_per_week||'unknown'}h
+- Training hours/week (profile target): ${p.hours_per_week||'unknown'}h (use actual Strava hours from ride data below if available — it is more accurate)
 
 GOAL (in athlete's own words):
 ${p.goal_text || 'Not specified'}
@@ -2124,48 +2116,78 @@ function renderRides(rides) {
 }
 
 function buildCoachData(allRides, recent) {
-  const outdoor = recent.filter(r => r.distance > 0);
-  const indoor = recent.filter(r => r.distance === 0 || r.trainer === true || r.type === 'VirtualRide');
+  const isIndoorRide = r => r.distance === 0 || r.trainer === true || r.type === 'VirtualRide' || r.sport_type === 'VirtualRide';
+  const outdoor = recent.filter(r => !isIndoorRide(r) && r.distance > 0);
+  const indoor = recent.filter(r => isIndoorRide(r));
+  const allRiding = recent; // includes both indoor and outdoor
+
+  // Total time includes ALL rides (indoor + outdoor)
+  const totalTime = allRiding.reduce((s,r)=>s+r.moving_time,0);
+  const totalTimeHours = (totalTime/3600).toFixed(1);
+  const avgWeeklyHours = (totalTime / 3600 / 4).toFixed(1); // over 4 weeks
+
+  // Outdoor-only metrics
   const totalDist = outdoor.reduce((s,r)=>s+r.distance,0);
   const totalElev = outdoor.reduce((s,r)=>s+r.total_elevation_gain,0);
-  const totalTime = outdoor.reduce((s,r)=>s+r.moving_time,0);
-  const avgHRrides = outdoor.filter(r=>r.average_heartrate);
+  const outdoorTime = outdoor.reduce((s,r)=>s+r.moving_time,0);
+  const indoorTime = indoor.reduce((s,r)=>s+r.moving_time,0);
+
+  const avgHRrides = allRiding.filter(r=>r.average_heartrate);
   const avgHR = avgHRrides.length ? Math.round(avgHRrides.reduce((s,r)=>s+r.average_heartrate,0)/avgHRrides.length) : 0;
-  const maxHRall = Math.max(...outdoor.filter(r=>r.max_heartrate).map(r=>r.max_heartrate), 0);
+  const maxHRall = Math.max(...allRiding.filter(r=>r.max_heartrate).map(r=>r.max_heartrate), 0);
   const prCount = outdoor.reduce((s,r)=>s+(r.pr_count||0),0);
   const longestRide = outdoor.length ? outdoor.reduce((a,b)=>a.distance>b.distance?a:b) : null;
   const mostClimbing = outdoor.length ? outdoor.reduce((a,b)=>a.total_elevation_gain>b.total_elevation_gain?a:b) : null;
 
-  const indoorSummary = indoor.length ? `Indoor/roller sessions: ${indoor.length} in last 4 weeks. ` +
-    indoor.slice(0,3).map(r => {
-      const date = new Date(r.start_date_local).toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'short'});
+  const indoorSummary = indoor.length ? 'Indoor/roller sessions: ' + indoor.length + ' in last 4 weeks (' + Math.round(indoorTime/3600) + 'h ' + Math.round((indoorTime%3600)/60) + 'min total). ' +
+    indoor.slice(0,5).map(r => {
+      const date = new Date(r.start_date_local).toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short'});
       const mins = Math.round(r.moving_time/60);
-      return `${date}: ${mins}min${r.average_heartrate?' avg '+Math.round(r.average_heartrate)+'bpm':''}${r.average_cadence?' cadence '+Math.round(r.average_cadence)+'rpm':''}${r.average_watts?' avg '+Math.round(r.average_watts)+'W':''}`;
-    }).join(', ') : '';
+      return date + ': ' + mins + 'min' +
+        (r.average_heartrate?' avg '+Math.round(r.average_heartrate)+'bpm':'') +
+        (r.average_cadence?' cadence '+Math.round(r.average_cadence)+'rpm':'') +
+        (r.average_watts?' avg '+Math.round(r.average_watts)+'W':'');
+    }).join(', ') : 'No indoor sessions recorded in last 4 weeks.';
 
-  const recentList = outdoor.slice(0,8).map(r => {
-    const date = new Date(r.start_date_local).toLocaleDateString('en-AU');
-    const km = (r.distance/1000).toFixed(1);
+  const recentList = allRiding.slice(0,10).map(r => {
+    const date = new Date(r.start_date_local).toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'short'});
     const mins = Math.round(r.moving_time/60);
-    return `${date}: ${km}km, ${Math.round(r.total_elevation_gain)}m elev, ${Math.floor(mins/60)}h${mins%60}m${r.average_heartrate?', avg '+Math.round(r.average_heartrate)+'bpm':''}${r.average_watts?', avg '+Math.round(r.average_watts)+'W':''}${r.pr_count>0?', '+r.pr_count+' PRs':''}`;
+    const isIndoor = isIndoorRide(r);
+    if (isIndoor) {
+      return date + ': INDOOR roller ' + mins + 'min' +
+        (r.average_heartrate?', avg '+Math.round(r.average_heartrate)+'bpm':'') +
+        (r.average_cadence?', cadence '+Math.round(r.average_cadence)+'rpm':'') +
+        (r.average_watts?', avg '+Math.round(r.average_watts)+'W':'');
+    }
+    const km = (r.distance/1000).toFixed(1);
+    return date + ': ' + km + 'km, ' + Math.round(r.total_elevation_gain) + 'm elev, ' +
+      Math.floor(mins/60) + 'h' + (mins%60) + 'm' +
+      (r.average_heartrate?', avg '+Math.round(r.average_heartrate)+'bpm':'') +
+      (r.average_watts?', avg '+Math.round(r.average_watts)+'W':'') +
+      (r.pr_count>0?', '+r.pr_count+' PRs':'');
   }).join('\n');
 
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   return `
 
-LAST 4 WEEKS STRAVA ANALYSIS (all dates in athlete local time: \${tz}):
-Total rides: ${outdoor.length} outdoor sessions
-Total distance: ${(totalDist/1000).toFixed(0)} km
+LAST 4 WEEKS STRAVA ANALYSIS (all dates in local time: ${tz}):
+Total training time (ALL rides inc. indoor): ${Math.floor(totalTime/3600)}h ${Math.round((totalTime%3600)/60)}m over 4 weeks
+Average weekly training hours (actual from Strava): ${avgWeeklyHours}h/week
+Outdoor riding time: ${Math.floor(outdoorTime/3600)}h ${Math.round((outdoorTime%3600)/60)}m
+Indoor/roller time: ${Math.floor(indoorTime/3600)}h ${Math.round((indoorTime%3600)/60)}m
+Total outdoor distance: ${(totalDist/1000).toFixed(0)} km
 Total elevation: ${Math.round(totalElev)} m
-Total riding time: ${Math.floor(totalTime/3600)}h ${Math.round((totalTime%3600)/60)}m
-Average HR across rides: ${avgHR || 'unknown'} bpm
+Total sessions: ${allRiding.length} (${outdoor.length} outdoor + ${indoor.length} indoor)
+Average HR across all rides: ${avgHR || 'unknown'} bpm
 Max HR recorded: ${maxHRall || 'unknown'} bpm
 Total PRs set: ${prCount}
-${longestRide ? `Longest ride: ${(longestRide.distance/1000).toFixed(0)}km, ${Math.round(longestRide.total_elevation_gain)}m elev` : ''}
-${mostClimbing ? `Most climbing: ${Math.round(mostClimbing.total_elevation_gain)}m in ${(mostClimbing.distance/1000).toFixed(0)}km` : ''}
+${longestRide ? 'Longest ride: ' + (longestRide.distance/1000).toFixed(0) + 'km, ' + Math.round(longestRide.total_elevation_gain) + 'm elev' : ''}
+${mostClimbing ? 'Most climbing: ' + Math.round(mostClimbing.total_elevation_gain) + 'm in ' + (mostClimbing.distance/1000).toFixed(0) + 'km' : ''}
 ${indoorSummary}
 
-RECENT RIDES (newest first):
+NOTE: Use actual Strava hours (${avgWeeklyHours}h/week) for training load advice, not the profile target of ${userProfile?.hours_per_week||'unknown'}h/week.
+
+ALL RECENT RIDES (newest first, indoor and outdoor):
 ${recentList}`;
 }
 </script>
