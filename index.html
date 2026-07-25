@@ -605,7 +605,25 @@ select:focus { border-color:var(--orange); }
     <button class="btn-primary" onclick="saveProfileEdits()">Save changes</button>
     <div class="field-hint success" id="profile-saved" style="margin-top:0.75rem;display:none;text-align:center">✓ Profile saved!</div>
 
-    <div style="margin-top:2rem;padding-top:1.25rem;border-top:1px solid var(--gravel)">
+    <div style="margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid var(--gravel)">
+      <p class="slabel">Strava connection</p>
+      <div id="strava-profile-status" class="box box-green" style="display:none">
+        <strong>✓ Strava connected</strong><br>
+        <span style="font-size:12px">Your rides sync automatically. <button onclick="reconnectStrava()" style="background:none;border:none;color:#85DBA8;font-size:12px;cursor:pointer;text-decoration:underline;padding:0">Reconnect</button> if sync stops working.</span>
+      </div>
+      <div id="strava-profile-disconnected" class="box box-orange" style="display:none">
+        <strong>⚠️ Strava not connected</strong><br>
+        <span style="font-size:12px">Connect Strava to sync your rides and get personalised coaching.</span>
+      </div>
+      <button id="strava-connect-btn" onclick="reconnectStrava()" class="strava-connect" style="margin-top:0.75rem;display:none">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+        Connect Strava
+      </button>
+    </div>
+
+    <div style="margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid var(--gravel)">
+      <p class="slabel">Account</p>
+      <div style="font-size:13px;color:var(--mist);margin-bottom:0.75rem" id="profile-email"></div>
       <button class="skip-btn" onclick="if(confirm('Sign out of VAMIQ?')) sb.auth.signOut()">Sign out</button>
     </div>
   </div>
@@ -1106,9 +1124,28 @@ function updateCoachWelcome() {
 
 function editGoal() { showScreen('onboarding'); nextStep(2); }
 
+function reconnectStrava() {
+  const clientId = '263268';
+  const redirectUri = encodeURIComponent('http://localhost');
+  const url = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=activity:read_all`;
+  window.open(url, '_blank');
+  // Show instruction
+  alert('1. Authorise on Strava\n2. Copy the full URL from the broken page\n3. Come back here and go to Profile → paste the code in the box below to reconnect');
+}
+
 function loadProfileTab() {
   if (!userProfile) return;
   const p = userProfile;
+
+  // Show Strava connection status
+  const isConnected = !!p.strava_access_token;
+  document.getElementById('strava-profile-status').style.display = isConnected ? 'block' : 'none';
+  document.getElementById('strava-profile-disconnected').style.display = isConnected ? 'none' : 'block';
+  document.getElementById('strava-connect-btn').style.display = isConnected ? 'none' : 'flex';
+
+  // Show account email
+  const emailEl = document.getElementById('profile-email');
+  if (emailEl && currentUser?.email) emailEl.textContent = 'Signed in as ' + currentUser.email;
   document.getElementById('p-name').value = p.name || '';
   document.getElementById('p-age').value = p.age || '';
   document.getElementById('p-weight').value = p.weight || '';
@@ -1178,7 +1215,10 @@ function show(id, btn) {
 
 // ── STRAVA ──
 async function syncStrava() {
-  if (!userProfile?.strava_access_token) return;
+  if (!userProfile?.strava_access_token) {
+    showSyncError('No Strava account connected. Go to Profile to connect Strava.');
+    return;
+  }
   const btn = document.getElementById('sync-btn');
   btn.textContent = '↻ Syncing...';
   btn.disabled = true;
@@ -1189,18 +1229,57 @@ async function syncStrava() {
     });
     const r = await fetch('/api/strava?' + params);
     const data = await r.json();
+
+    // Check for Strava API errors
+    if (data.message) {
+      const msg = data.message;
+      if (msg.includes('Authorization') || msg.includes('invalid_token') || data.errors?.[0]?.code === 'missing') {
+        showSyncError('Strava authorisation failed — your token may have expired. Please reconnect Strava in Profile.');
+      } else if (msg.includes('Limit') || msg.includes('quota')) {
+        showSyncError('Strava API limit reached — the app needs production access approval. Contact hello@vamiq.au');
+      } else {
+        showSyncError('Strava error: ' + msg);
+      }
+      btn.textContent = '↻ Sync'; btn.disabled = false;
+      return;
+    }
+
     if (Array.isArray(data) && data.length > 0) {
       renderRides(data);
       updateDashboard(data);
       document.getElementById('strava-pill').style.display = 'flex';
       btn.textContent = '✓ Synced';
+      hideSyncError();
       setTimeout(() => { btn.textContent = '↻ Sync'; btn.disabled = false; }, 3000);
+    } else if (Array.isArray(data) && data.length === 0) {
+      btn.textContent = '↻ Sync'; btn.disabled = false;
+      showSyncError('No rides found in Strava — make sure your activities are set to public or followers.');
     } else {
       btn.textContent = '↻ Sync'; btn.disabled = false;
+      showSyncError('Unexpected response from Strava. Try again or reconnect in Profile.');
     }
   } catch(e) {
     btn.textContent = '↻ Sync'; btn.disabled = false;
+    showSyncError('Connection error: ' + e.message);
   }
+}
+
+function showSyncError(msg) {
+  let el = document.getElementById('sync-error');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'sync-error';
+    el.style.cssText = 'background:#2E0A0A;border:1px solid #5A1010;color:#FF8585;font-size:12px;padding:8px 12px;border-radius:8px;margin:8px 1.25rem 0;line-height:1.5';
+    const nav = document.querySelector('.app-nav');
+    nav.parentNode.insertBefore(el, nav.nextSibling);
+  }
+  el.textContent = '⚠️ ' + msg;
+  el.style.display = 'block';
+}
+
+function hideSyncError() {
+  const el = document.getElementById('sync-error');
+  if (el) el.style.display = 'none';
 }
 
 
