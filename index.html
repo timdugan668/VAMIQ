@@ -1612,10 +1612,15 @@ function renderCalendar() {
       const weekOffset = Math.floor((date - getMonday(today)) / (7 * 86400000));
       daysHtml += `<div class="cal-day ${cls}${isToday?' today':''}${isPast?' past':''}" 
         title="${isRace?'RACE DAY!':DAY_LABELS[type]}" 
-        onclick="showWeekFromDate('${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}')">${day}</div>`;
+        onclick="event.stopPropagation();showWeekFromDate('${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}')">${day}</div>`;
     }
 
-    const m1 = new Date(year,month,1); return `<div class="cal-month" onclick="showWeekFromDate('${m1.getFullYear()}-${String(m1.getMonth()+1).padStart(2,'0')}-01')">
+    // Find first Monday of month (on or after 1st)
+const m1 = new Date(year,month,1);
+const m1Day = m1.getDay(); // 0=Sun
+const daysToMon = m1Day === 1 ? 0 : m1Day === 0 ? 1 : 8 - m1Day;
+const firstMon = new Date(year,month,1+daysToMon);
+return `<div class="cal-month" onclick="showWeekFromDate('${firstMon.getFullYear()}-${String(firstMon.getMonth()+1).padStart(2,'0')}-${String(firstMon.getDate()).padStart(2,'0')}')">
       <div class="cal-month-header">
         <div class="cal-month-name">${monthName}</div>
         <div class="cal-month-phase" style="color:${phaseColors[phase]}">${phase}</div>
