@@ -876,45 +876,13 @@ function selectGoal(goal) {
 
 function connectStrava() {
   const clientId = '263268';
-  const redirectUri = encodeURIComponent(window.location.origin + '/api/strava-callback');
+  const redirectUri = encodeURIComponent('https://vamiq.au/api/strava-callback');
   const url = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=activity:read_all`;
   window.location.href = url;
 }
 
 async function skipStrava() {
   await completeOnboarding(null);
-}
-
-async function submitStravaCode() {
-  const codeInput = document.getElementById('strava-code').value.trim();
-  // Extract code if user pasted full URL
-  let code = codeInput;
-  if (codeInput.includes('code=')) {
-    const match = codeInput.match(/code=([^&]+)/);
-    if (match) code = match[1];
-  }
-  if (!code) { alert('Please paste the code from your browser address bar'); return; }
-  
-  try {
-    const r = await fetch('https://www.strava.com/oauth/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: '263268',
-        client_secret: '1a1f169b3966448a3d7e37307ca4a1ce95bad825',
-        code,
-        grant_type: 'authorization_code'
-      })
-    });
-    const data = await r.json();
-    if (data.access_token) {
-      await completeOnboarding({ access_token: data.access_token, refresh_token: data.refresh_token });
-    } else {
-      alert('Could not connect Strava — please try again or skip for now');
-    }
-  } catch(e) {
-    alert('Connection error — please skip for now and connect Strava later');
-  }
 }
 
 async function completeOnboarding(stravaData) {
@@ -1151,7 +1119,7 @@ function editGoal() { showScreen('onboarding'); nextStep(2); }
 
 function reconnectStrava() {
   const clientId = '263268';
-  const redirectUri = encodeURIComponent(window.location.origin + '/api/strava-callback');
+  const redirectUri = encodeURIComponent('https://vamiq.au/api/strava-callback');
   const url = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=activity:read_all`;
   window.location.href = url;
 }
