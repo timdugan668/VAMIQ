@@ -874,11 +874,54 @@ function selectGoal(goal) {
   document.getElementById('event-date-field').style.display = showEvent ? 'block' : 'none';
 }
 
-function connectStrava() {
+async function startStravaAuth() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { alert('Please sign in again before connecting Strava.'); return; }
+  let state;
+  try {
+    const r = await fetch('/api/strava-connect', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + session.access_token }
+    });
+    const data = await r.json();
+    if (!data.state) throw new Error(data.error || 'Could not start Strava connection');
+    state = data.state;
+  } catch (e) {
+    alert('Could not start Strava connection: ' + e.message + '. Please try again.');
+    return;
+  }
   const clientId = '263268';
   const redirectUri = encodeURIComponent('https://vamiq.au/api/strava-callback');
-  const url = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=activity:read_all`;
+  const url = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=activity:read_all&state=${encodeURIComponent(state)}`;
   window.location.href = url;
+}
+
+async function connectStrava() {
+  // Called from onboarding step 4 — save what we've collected so far first,
+  // so the profile row exists when Strava redirects back to the callback.
+  const goalText = document.getElementById('ob-goal-text')?.value.trim() || '';
+  const gtLower = goalText.toLowerCase();
+  let detectedGoalType = 'fitness';
+  if (gtLower.includes('uci') || gtLower.includes('world') || gtLower.includes('qualify') || gtLower.includes('qualifier')) detectedGoalType = 'uci_qualifier';
+  else if (gtLower.includes('gran fondo') || gtLower.includes('granfondo') || gtLower.includes('fondo')) detectedGoalType = 'gran_fondo';
+  else if (gtLower.includes('century') || gtLower.includes('100km') || gtLower.includes('100 km')) detectedGoalType = 'century';
+
+  await saveProfile({
+    name: document.getElementById('ob-name').value.trim(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    age: parseInt(document.getElementById('ob-age').value) || null,
+    weight: parseFloat(document.getElementById('ob-weight').value) || null,
+    experience: document.getElementById('ob-experience').value,
+    goal_type: detectedGoalType,
+    goal_text: goalText,
+    goal_event: document.getElementById('ob-event')?.value || '',
+    goal_date: document.getElementById('ob-event-date')?.value || null,
+    hours_per_week: parseInt(document.getElementById('ob-hours').value) || null,
+    has_power_meter: document.getElementById('ob-power').value,
+    ftp: parseInt(document.getElementById('ob-ftp').value) || null,
+  });
+
+  await startStravaAuth();
 }
 
 async function skipStrava() {
@@ -916,6 +959,7 @@ async function completeOnboarding(stravaData) {
 
 // ── APP ──
 function initApp() {
+  handleStravaRedirectParams();
   updateCountdowns();
   updateGoalDisplay();
   updateWeeklyPlan();
@@ -923,6 +967,26 @@ function initApp() {
   if (userProfile?.strava_access_token) syncStrava();
   if (userProfile?.name) {
     document.getElementById('app-sub').textContent = `Welcome back, ${userProfile.name}`;
+  }
+}
+
+function handleStravaRedirectParams() {
+  const params = new URLSearchParams(window.location.search);
+  const connected = params.get('strava_connected');
+  const err = params.get('strava_error');
+  if (!connected && !err) return;
+  // Clean the URL so a refresh doesn't re-trigger this
+  window.history.replaceState({}, '', window.location.pathname);
+  if (err) {
+    const messages = {
+      no_code: 'Strava did not return an authorisation code. Please try connecting again.',
+      missing_state: 'Connection request was invalid. Please try connecting again.',
+      invalid_state: 'Connection request expired or was already used. Please try reconnecting.',
+      state_expired: 'Connection request timed out. Please try reconnecting.',
+      token_exchange_failed: 'Strava could not verify the connection. Please try again.',
+      save_failed: 'Connected to Strava but could not save it — please try again.',
+    };
+    setTimeout(() => alert(messages[err] || ('Strava connection error: ' + err)), 300);
   }
 }
 
@@ -1117,11 +1181,8 @@ function updateCoachWelcome() {
 
 function editGoal() { showScreen('onboarding'); nextStep(2); }
 
-function reconnectStrava() {
-  const clientId = '263268';
-  const redirectUri = encodeURIComponent('https://vamiq.au/api/strava-callback');
-  const url = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=activity:read_all`;
-  window.location.href = url;
+async function reconnectStrava() {
+  await startStravaAuth();
 }
 
 function loadProfileTab() {
@@ -1214,12 +1275,17 @@ async function syncStrava() {
   btn.textContent = '↻ Syncing...';
   btn.disabled = true;
   try {
-    const params = new URLSearchParams({
-      access_token: userProfile.strava_access_token,
-      refresh_token: userProfile.strava_refresh_token || ''
-    });
-    const r = await fetch('/api/strava?' + params);
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { showSyncError('Please sign in again.'); btn.textContent = '↻ Sync'; btn.disabled = false; return; }
+    const r = await fetch('/api/strava', { headers: { Authorization: 'Bearer ' + session.access_token } });
     const data = await r.json();
+
+    // Check for our own server-side errors (auth/connection issues)
+    if (data.error) {
+      showSyncError(data.error);
+      btn.textContent = '↻ Sync'; btn.disabled = false;
+      return;
+    }
 
     // Check for Strava API errors
     if (data.message) {
@@ -1767,16 +1833,12 @@ async function openRide(activityId) {
   document.getElementById('streams-section').style.display = 'none';
 
   try {
-    const params = new URLSearchParams({
-      access_token: userProfile.strava_access_token,
-      refresh_token: userProfile.strava_refresh_token || '',
-      mode: 'activity',
-      activity_id: activityId
-    });
+    const { data: { session } } = await sb.auth.getSession();
+    const authHeaders = { Authorization: 'Bearer ' + (session?.access_token || '') };
 
     const [actRes, streamRes] = await Promise.all([
-      fetch('/api/strava?' + params),
-      fetch('/api/strava?' + new URLSearchParams({ ...Object.fromEntries(params), mode: 'streams' }))
+      fetch('/api/strava?' + new URLSearchParams({ mode: 'activity', activity_id: activityId }), { headers: authHeaders }),
+      fetch('/api/strava?' + new URLSearchParams({ mode: 'streams', activity_id: activityId }), { headers: authHeaders })
     ]);
 
     const act = await actRes.json();
