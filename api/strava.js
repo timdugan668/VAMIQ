@@ -28,7 +28,7 @@ export default async function handler(req, res) {
   try {
     const profRes = await fetch(
       `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=strava_access_token,strava_refresh_token`,
-      { headers: { apikey: SUPABASE_SECRET_KEY, Authorization: `Bearer ${SUPABASE_SECRET_KEY}` } }
+      { headers: { apikey: SUPABASE_SECRET_KEY } }
     );
     const rows = await profRes.json();
     profile = rows?.[0];
@@ -64,7 +64,6 @@ export default async function handler(req, res) {
             method: 'PATCH',
             headers: {
               apikey: SUPABASE_SECRET_KEY,
-              Authorization: `Bearer ${SUPABASE_SECRET_KEY}`,
               'Content-Type': 'application/json',
               Prefer: 'return=minimal'
             },
