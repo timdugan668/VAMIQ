@@ -19,7 +19,7 @@ export default async function handler(req, res) {
   try {
     const stateRes = await fetch(
       `${SUPABASE_URL}/rest/v1/oauth_states?state=eq.${encodeURIComponent(state)}&select=user_id,created_at`,
-      { headers: { apikey: SUPABASE_SECRET_KEY, Authorization: `Bearer ${SUPABASE_SECRET_KEY}` } }
+      { headers: { apikey: SUPABASE_SECRET_KEY } }
     );
     const rows = await stateRes.json();
     const row = rows?.[0];
@@ -35,7 +35,7 @@ export default async function handler(req, res) {
     // Single-use — delete immediately so it can't be replayed
     await fetch(`${SUPABASE_URL}/rest/v1/oauth_states?state=eq.${encodeURIComponent(state)}`, {
       method: 'DELETE',
-      headers: { apikey: SUPABASE_SECRET_KEY, Authorization: `Bearer ${SUPABASE_SECRET_KEY}` }
+      headers: { apikey: SUPABASE_SECRET_KEY }
     });
   } catch (e) {
     return res.redirect('/?strava_error=' + encodeURIComponent(e.message));
@@ -63,7 +63,6 @@ export default async function handler(req, res) {
       method: 'PATCH',
       headers: {
         apikey: SUPABASE_SECRET_KEY,
-        Authorization: `Bearer ${SUPABASE_SECRET_KEY}`,
         'Content-Type': 'application/json',
         Prefer: 'return=minimal'
       },
