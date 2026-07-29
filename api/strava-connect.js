@@ -32,13 +32,12 @@ export default async function handler(req, res) {
     // Clean up any old unused states for this user first
     await fetch(`${SUPABASE_URL}/rest/v1/oauth_states?user_id=eq.${userId}`, {
       method: 'DELETE',
-      headers: { apikey: SUPABASE_SECRET_KEY, Authorization: `Bearer ${SUPABASE_SECRET_KEY}` }
+      headers: { apikey: SUPABASE_SECRET_KEY }
     });
     const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/oauth_states`, {
       method: 'POST',
       headers: {
         apikey: SUPABASE_SECRET_KEY,
-        Authorization: `Bearer ${SUPABASE_SECRET_KEY}`,
         'Content-Type': 'application/json',
         Prefer: 'return=minimal'
       },
@@ -51,4 +50,3 @@ export default async function handler(req, res) {
 
   return res.status(200).json({ state });
 }
-
