@@ -1744,8 +1744,8 @@ async function send() {
         const header = document.createElement('div');
         header.style.cssText = 'display:flex;gap:8px;margin-bottom:8px';
         header.innerHTML = `
-          <button class="btn-primary" style="margin:0;padding:6px 12px;font-size:12px;flex:none" onclick="applyAllScheduleChanges('${groupId}', this)">Confirm all ${validProposals.length} changes</button>
-          <button class="skip-btn" style="padding:6px 12px;font-size:12px;flex:none" onclick="dismissAllScheduleProposals('${groupId}')">Dismiss all</button>`;
+          <button class="btn-primary" style="width:auto;margin:0;padding:6px 12px;font-size:12px;flex:none" onclick="applyAllScheduleChanges('${groupId}', this)">Confirm all ${validProposals.length} changes</button>
+          <button class="skip-btn" style="width:auto;padding:6px 12px;font-size:12px;flex:none" onclick="dismissAllScheduleProposals('${groupId}')">Dismiss all</button>`;
         group.appendChild(header);
       }
 
@@ -1762,8 +1762,8 @@ async function send() {
           <div style="color:var(--fog);margin-bottom:${hasRisk?'8px':'10px'}">${escapeHtml(p.detail)}</div>
           ${hasRisk ? `<div style="background:var(--orange-lo);border:1px solid #5A2010;border-radius:6px;padding:6px 10px;color:#FFB085;font-size:12px;margin-bottom:10px">⚠️ ${escapeHtml(p.risk_note)}</div>` : ''}
           <div style="display:flex;gap:8px">
-            <button class="btn-primary sp-confirm-btn" style="margin:0;padding:6px 12px;font-size:12px;flex:none" onclick='applyScheduleChange(${JSON.stringify(p).replace(/'/g,"&#39;")}, this)'>Confirm &amp; apply</button>
-            <button class="skip-btn sp-dismiss-btn" style="padding:6px 12px;font-size:12px;flex:none" onclick="dismissScheduleProposal(this)">Dismiss</button>
+            <button class="btn-primary sp-confirm-btn" style="width:auto;margin:0;padding:6px 12px;font-size:12px;flex:none" onclick='applyScheduleChange(${JSON.stringify(p).replace(/'/g,"&#39;")}, this)'>Confirm &amp; apply</button>
+            <button class="skip-btn sp-dismiss-btn" style="width:auto;padding:6px 12px;font-size:12px;flex:none" onclick="dismissScheduleProposal(this)">Dismiss</button>
           </div>`;
         group.appendChild(card);
       });
