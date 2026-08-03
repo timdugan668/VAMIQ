@@ -731,6 +731,7 @@ let chatHistory = [];
 let liveRides = '';
 let currentStep = 1;
 let selectedGoal = '';
+let scheduleOverrides = {}; // keyed by 'YYYY-MM-DD' -> {session_type, title, description}
 
 // ── INIT ──
 window.addEventListener('load', async () => {
@@ -1016,10 +1017,98 @@ function initApp() {
   updateGoalDisplay();
   updateWeeklyPlan();
   updateCoachWelcome();
+  loadScheduleOverrides();
   if (userProfile?.strava_access_token) syncStrava();
   if (userProfile?.name) {
     document.getElementById('app-sub').textContent = `Welcome back, ${userProfile.name}`;
   }
+}
+
+async function loadScheduleOverrides() {
+  try {
+    const { data, error } = await sb.from('schedule_overrides').select('date,session_type,title,description').eq('user_id', currentUser.id);
+    if (error || !data) return;
+    scheduleOverrides = {};
+    data.forEach(row => {
+      scheduleOverrides[row.date] = { session_type: row.session_type, title: row.title, description: row.description };
+    });
+    // Refresh calendar views if currently visible so overrides show immediately
+    if (document.getElementById('cal-week-view')?.style.display !== 'none') renderWeekDetail();
+    if (document.getElementById('calendar')?.classList.contains('active')) renderCalendar();
+  } catch (e) {}
+}
+
+async function resetScheduleDay(dateStr) {
+  if (!confirm('Reset this day back to your default training plan?')) return;
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const r = await fetch('/api/schedule-apply', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'reset', date: dateStr })
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Could not reset'); }
+    delete scheduleOverrides[dateStr];
+    renderWeekDetail();
+    renderCalendar();
+  } catch (e) {
+    alert('Could not reset that day: ' + e.message);
+  }
+}
+
+async function applyScheduleChange(change, btnEl) {
+  btnEl.disabled = true;
+  btnEl.textContent = 'Applying…';
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const r = await fetch('/api/schedule-apply', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'set', date: change.date, session_type: change.type, title: change.title, detail: change.detail })
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Could not apply'); }
+    scheduleOverrides[change.date] = { session_type: change.type, title: change.title, description: change.detail };
+    renderWeekDetail();
+    renderCalendar();
+    const card = btnEl.closest('.schedule-proposal-card');
+    if (card) card.innerHTML = `<div style="color:var(--green);font-size:12px">✓ Applied to your calendar — check the Calendar tab.</div>`;
+  } catch (e) {
+    btnEl.disabled = false;
+    btnEl.textContent = 'Confirm & apply';
+    alert('Could not apply that change: ' + e.message);
+  }
+}
+
+function dismissScheduleProposal(btnEl) {
+  const card = btnEl.closest('.schedule-proposal-card');
+  if (card) card.remove();
+}
+
+async function applyAllScheduleChanges(groupId, btnEl) {
+  const group = document.getElementById(groupId);
+  if (!group) return;
+  btnEl.disabled = true;
+  btnEl.textContent = 'Applying all…';
+  const cards = Array.from(group.querySelectorAll('.schedule-proposal-card'));
+  let failCount = 0;
+  for (const card of cards) {
+    const confirmBtn = card.querySelector('.sp-confirm-btn');
+    if (!confirmBtn || confirmBtn.disabled) continue;
+    try {
+      const p = JSON.parse(card.dataset.proposal);
+      await applyScheduleChange(p, confirmBtn);
+    } catch (e) {
+      failCount++;
+    }
+  }
+  btnEl.textContent = failCount ? `Applied with ${failCount} error(s)` : '✓ All applied';
+  const dismissAllBtn = group.querySelector('button[onclick^="dismissAllScheduleProposals"]');
+  if (dismissAllBtn) dismissAllBtn.remove();
+}
+
+function dismissAllScheduleProposals(groupId) {
+  const group = document.getElementById(groupId);
+  if (group) group.remove();
 }
 
 function handleStravaRedirectParams() {
@@ -1504,6 +1593,8 @@ function buildSystemPrompt() {
   const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const userUTCOffset = -(new Date().getTimezoneOffset()/60);
   const userUTCOffsetStr = (userUTCOffset >= 0 ? '+' : '') + userUTCOffset;
+  const todayStr = new Date().toISOString().slice(0,10);
+  const todayDay = new Date().toLocaleDateString('en-AU', { weekday: 'long' });
 
   const rideContext = window.CURRENT_RIDE_CONTEXT ? ("\n\n" + window.CURRENT_RIDE_CONTEXT) : "";
 
@@ -1540,11 +1631,28 @@ Note: All ride dates are in the athlete's local time (\${userTimezone}). Do not 
 WEEK-BY-WEEK ADAPTATION:
 - 8+ weeks out: Base phase — long Z2, 3x12min threshold, fatigue climbing 3x8min
 - 4-8 weeks out: Build phase — increase to 4x12min threshold, 4x8min fatigue climbs, longer long rides
-- 2-3 weeks out: Sharpen phase — reduce volume, maintain intensity, race simulations, full nutrition practice
-- Race week: Taper — 45min easy rides, short race-pace reminders, rest and prepare
-You MUST prescribe sessions appropriate to the current phase. Never give base-phase sessions when athlete is 2 weeks from their event.
+- 3 weeks out: Sharpen phase — reduce volume slightly, race simulation session, full nutrition practice
+- 2 weeks out: Taper phase — cut volume by roughly 50% vs peak, but KEEP intensity (efforts stay at race pace/threshold, just fewer/shorter reps). Long ride roughly halved.
+- Race week (final week before the event): cut volume by roughly 70% vs peak, with only brief, limited race-pace reminders (a few short efforts, nothing that creates fatigue). Rest and prepare.
+You MUST prescribe sessions appropriate to the current phase, and be precise about which taper stage the athlete is in — 2 weeks out and race week are NOT the same and should not get identical advice. Never give base-phase or build-phase sessions once the athlete is within 3 weeks of their event.
 
 TIMEZONE NOTE: Athlete timezone is \${userTimezone} (UTC offset \${userUTCOffset}). Strava activity dates provided use start_date_local which is already in the athlete's local time. Do NOT adjust dates — treat all dates and days as-is in the athlete's local time.
+
+TODAY: ${todayStr} (${todayDay}), in the athlete's local time.
+
+CHANGING THE ATHLETE'S CALENDAR:
+If the athlete asks you to change one or more days' sessions (e.g. "make Saturday easier", "swap Tuesday for rest", "I'm sick this week", "I'm travelling next week and can't train properly"), you can propose concrete changes to their actual calendar — one day or many. Do NOT apply changes silently — always briefly confirm in plain conversational text what you're proposing and why, THEN append one machine-readable block per changed day in EXACTLY this format, with no other text inside each block:
+
+[[SCHEDULE_CHANGE]]{"date":"YYYY-MM-DD","type":"rest|easy|threshold|social|fatigue|long","title":"Short session title","detail":"Full session description shown to the athlete, written the same way as your normal coaching advice","risk_note":"Optional — only include this field if this specific change puts the athlete's goal at meaningful risk (lost fitness, reduced race readiness, needs downstream compensation). Explain the risk in one concise sentence. Omit this field entirely if there is no meaningful risk."}[[/SCHEDULE_CHANGE]]
+
+Rules:
+- Only emit blocks when the athlete has clearly asked for a specific, concrete calendar change — not for general questions or advice.
+- Use the athlete's actual calendar dates (calculate from TODAY above), not vague day names alone.
+- MULTI-DAY CHANGES: for scenarios spanning several days (illness, travel, injury, work trip, etc.), propose one block per affected day, covering the FULL affected period, not just the first day. The athlete will see a "Confirm all" option as well as individual confirm buttons.
+- GOAL RISK: before proposing any change, think about whether it meaningfully affects the athlete's readiness for their goal event — e.g. losing key Build-phase sessions, missing the last big fatigue-climb before taper, or being sick during a critical week. If so: (a) say so plainly in your conversational reply — do not downplay or hide it, (b) include the risk_note field on the relevant day(s) explaining the specific risk, and (c) where sensible, suggest how the rest of the plan should adapt to compensate (e.g. extending Build phase by a few days, adjusting expectations for race day, or prioritising which missed sessions matter most). Minor changes (e.g. swapping one easy day for another easy day) do not need a risk_note — reserve it for genuine risk to the goal.
+- Place all blocks at the very end of your reply, after your conversational explanation.
+- The athlete will see a Confirm button and must approve before anything is actually changed — so it's safe to propose. Say so naturally in your reply (e.g. "I've set that up below — hit confirm if that works for you").
+- Keep proposed sessions consistent with the athlete's current training phase and the taper/phase rules above, unless the athlete's situation (illness, travel) means the normal phase progression genuinely can't apply right now.
 
 IMPORTANT: The athlete's goal description above is the most important context. Read it carefully and tailor ALL coaching advice specifically to what they have described. If they mention a specific event, date, qualification standard or performance target, focus your coaching on that. Be specific, practical and encouraging. Australian casual tone. Concise but actionable.` + rideContext;
 }
@@ -1565,7 +1673,7 @@ async function send() {
     const r = await fetch('/api/chat', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:1000, stream:true, system: buildSystemPrompt()+liveRides, messages:chatHistory })
+      body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:2200, stream:true, system: buildSystemPrompt()+liveRides, messages:chatHistory })
     });
 
     if (!r.ok) { const e = await r.json(); throw new Error(e.error||'API error'); }
@@ -1594,13 +1702,66 @@ async function send() {
           const delta = parsed.delta?.text || '';
           if (delta) {
             fullReply += delta;
-            bubbleEl.innerHTML = fullReply.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+            const liveDisplay = fullReply.split('[[SCHEDULE_CHANGE]]')[0];
+            bubbleEl.innerHTML = liveDisplay.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
             // Auto scroll
             const msgs = document.getElementById('chat-msgs');
             msgs.scrollTop = msgs.scrollHeight;
           }
         } catch(e) {}
       }
+    }
+
+    // Extract any schedule-change proposals the coach included, strip them from
+    // the visible text, and render confirm/dismiss cards for each one.
+    const changeRegex = /\[\[SCHEDULE_CHANGE\]\]([\s\S]*?)\[\[\/SCHEDULE_CHANGE\]\]/g;
+    const proposals = [];
+    let match;
+    while ((match = changeRegex.exec(fullReply)) !== null) {
+      try { proposals.push(JSON.parse(match[1].trim())); } catch (e) {}
+    }
+    const displayText = fullReply.replace(changeRegex, '').trim();
+    bubbleEl.innerHTML = displayText.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+
+    const validProposals = proposals.filter(p => p.date && p.type && p.title && p.detail);
+    if (validProposals.length) {
+      const groupId = 'spg-' + Date.now();
+      const group = document.createElement('div');
+      group.className = 'schedule-proposal-group';
+      group.id = groupId;
+      group.style.cssText = 'margin-top:8px;max-width:85%';
+
+      if (validProposals.length > 1) {
+        const header = document.createElement('div');
+        header.style.cssText = 'display:flex;gap:8px;margin-bottom:8px';
+        header.innerHTML = `
+          <button class="btn-primary" style="margin:0;padding:6px 12px;font-size:12px;flex:none" onclick="applyAllScheduleChanges('${groupId}', this)">Confirm all ${validProposals.length} changes</button>
+          <button class="skip-btn" style="padding:6px 12px;font-size:12px;flex:none" onclick="dismissAllScheduleProposals('${groupId}')">Dismiss all</button>`;
+        group.appendChild(header);
+      }
+
+      validProposals.forEach((p, idx) => {
+        const dateLabel = new Date(p.date + 'T00:00:00').toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'short' });
+        const hasRisk = !!p.risk_note;
+        const card = document.createElement('div');
+        card.className = 'schedule-proposal-card';
+        card.dataset.proposal = JSON.stringify(p);
+        card.style.cssText = `background:var(--asphalt);border:1px solid ${hasRisk?'#5A2010':'var(--gravel)'};border-radius:var(--r);padding:12px 14px;margin-bottom:8px;font-size:13px`;
+        card.innerHTML = `
+          <div style="font-size:11px;color:var(--mist);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Proposed change · ${dateLabel}</div>
+          <div style="font-weight:600;margin-bottom:2px">${p.title}</div>
+          <div style="color:var(--fog);margin-bottom:${hasRisk?'8px':'10px'}">${p.detail}</div>
+          ${hasRisk ? `<div style="background:var(--orange-lo);border:1px solid #5A2010;border-radius:6px;padding:6px 10px;color:#FFB085;font-size:12px;margin-bottom:10px">⚠️ ${p.risk_note}</div>` : ''}
+          <div style="display:flex;gap:8px">
+            <button class="btn-primary sp-confirm-btn" style="margin:0;padding:6px 12px;font-size:12px;flex:none" onclick='applyScheduleChange(${JSON.stringify(p).replace(/'/g,"&#39;")}, this)'>Confirm &amp; apply</button>
+            <button class="skip-btn sp-dismiss-btn" style="padding:6px 12px;font-size:12px;flex:none" onclick="dismissScheduleProposal(this)">Dismiss</button>
+          </div>`;
+        group.appendChild(card);
+      });
+
+      document.getElementById('chat-msgs').appendChild(group);
+      const msgs = document.getElementById('chat-msgs');
+      msgs.scrollTop = msgs.scrollHeight;
     }
 
     chatHistory.push({ role:'assistant', content:fullReply });
@@ -1677,7 +1838,8 @@ function getPhase(date) {
   if (daysOut > 90) return 'Base';
   if (daysOut > 42) return 'Build';
   if (daysOut > 14) return 'Sharpen';
-  if (daysOut > 0) return 'Taper';
+  if (daysOut > 7) return 'Taper';
+  if (daysOut > 0) return 'Race Week';
   return 'Post-race';
 }
 
@@ -1711,7 +1873,7 @@ function renderCalendar() {
     const month = monthDate.getMonth();
     const monthName = monthDate.toLocaleDateString('en-AU',{month:'long',year:'numeric'});
     const phase = getPhase(monthDate);
-    const phaseColors = {'Base':'var(--green)','Build':'var(--yellow)','Sharpen':'var(--orange)','Taper':'#6BA3E8','Post-race':'var(--mist)'};
+    const phaseColors = {'Base':'var(--green)','Build':'var(--yellow)','Sharpen':'var(--orange)','Taper':'#6BA3E8','Race Week':'var(--orange-hi)','Post-race':'var(--mist)'};
 
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -1723,15 +1885,17 @@ function renderCalendar() {
 
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month, day);
-      const type = getTrainingType(date);
+      const dateStr = date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0') + '-' + String(date.getDate()).padStart(2,'0');
+      const override = scheduleOverrides[dateStr];
+      const type = override ? override.session_type : getTrainingType(date);
       const isToday = date.toDateString() === today.toDateString();
       const isPast = date < today && !isToday;
       const isRace = userProfile?.goal_date && date.toDateString() === new Date(userProfile.goal_date).toDateString();
       const cls = isRace ? 'race' : type;
       const weekOffset = Math.floor((date - getMonday(today)) / (7 * 86400000));
-      daysHtml += `<div class="cal-day ${cls}${isToday?' today':''}${isPast?' past':''}" 
-        title="${isRace?'RACE DAY!':DAY_LABELS[type]}" 
-        onclick="event.stopPropagation();showWeekFromDate('${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}')">${day}</div>`;
+      daysHtml += `<div class="cal-day ${cls}${isToday?' today':''}${isPast?' past':''}" style="${override?'box-shadow:0 0 0 1.5px var(--orange-hi) inset;':''}"
+        title="${isRace?'RACE DAY!':(override?'✎ '+override.title:DAY_LABELS[type])}" 
+        onclick="event.stopPropagation();showWeekFromDate('${dateStr}')">${day}</div>`;
     }
 
     // Find first Monday of month (on or after 1st)
@@ -1816,24 +1980,36 @@ function renderWeekDetail() {
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
     d.setDate(d.getDate() + i);
-    const type = getTrainingType(d);
+    const dateStr = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const override = scheduleOverrides[dateStr];
+    const type = override ? override.session_type : getTrainingType(d);
     const isRace = userProfile?.goal_date && d.toDateString() === new Date(userProfile.goal_date).toDateString();
     const isToday = d.toDateString() === new Date().toDateString();
     const dayName = d.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'short'});
 
     let detail = '';
-    if (isRace) {
+    if (override) {
+      detail = `<strong>${override.title}</strong> ${override.description} <span style="color:var(--mist);font-size:11px">✎ Adjusted with your coach — <a href="#" onclick="resetScheduleDay('${dateStr}');return false;" style="color:var(--orange-hi)">reset to default</a></span>`;
+    } else if (isRace) {
       detail = `<strong>🏁 RACE DAY — ${userProfile.goal_event||'Your event'}!</strong> Everything you have trained for. Stick to your pacing plan. Enjoy every kilometre!`;
     } else if (weeksOut !== null && weeksOut <= 1 && weeksOut > 0) {
-      // Race week — taper
+      // Race week — ~70% volume reduction, limited intensity kept
       if (type === 'rest') detail = 'Rest day. Sleep well, stay off your feet, trust your training.';
-      else if (type === 'easy') detail = `<strong>RACE WEEK — 45 min easy spin only.</strong> HR under ${z1hr} bpm. Just keep the legs ticking over. No effort whatsoever.`;
-      else if (type === 'threshold') detail = `<strong>RACE WEEK — 30 min easy + 3×5 min at race pace.</strong> Just a reminder to your legs what hard feels like. ${z4low}–${z4hiw}W est. Nothing more.`;
-      else if (type === 'social') detail = 'RACE WEEK — skip the group ride or do 45 min very easy only. Protect your legs.';
-      else if (type === 'fatigue') detail = `<strong>RACE WEEK — 60 min easy with 3×3 min at race pace.</strong> HR under ${z3hr} bpm. Short, sharp, done. Rest the remainder of the day.`;
-      else if (type === 'long') detail = `<strong>RACE WEEK — 90 min easy ride Saturday.</strong> Z1–Z2 only, HR under ${z2hr} bpm. Check your bike, prepare your kit and nutrition. Early night.`;
-    } else if (weeksOut !== null && weeksOut <= 3 && weeksOut > 1) {
-      // Sharpen phase — 2-3 weeks out
+      else if (type === 'easy') detail = `<strong>RACE WEEK — 30 min easy spin only.</strong> HR under ${z1hr} bpm. Just keep the legs ticking over. No effort whatsoever.`;
+      else if (type === 'threshold') detail = `<strong>RACE WEEK — 20 min easy + 3×3 min at race pace.</strong> Just a reminder to your legs what hard feels like. ${z4low}–${z4hiw}W est. Nothing more.`;
+      else if (type === 'social') detail = 'RACE WEEK — skip the group ride or do 30–40 min very easy only. Protect your legs.';
+      else if (type === 'fatigue') detail = `<strong>RACE WEEK — 45 min easy with 2×3 min at race pace.</strong> HR under ${z3hr} bpm. Short, sharp, done. Rest the remainder of the day.`;
+      else if (type === 'long') detail = `<strong>RACE WEEK — 75–90 min easy ride Saturday.</strong> Z1–Z2 only, HR under ${z2hr} bpm. Check your bike, prepare your kit and nutrition. Early night.`;
+    } else if (weeksOut !== null && weeksOut <= 2 && weeksOut > 1) {
+      // Taper — 2 weeks out: ~50% volume reduction, intensity kept but shortened
+      if (type === 'rest') detail = 'Rest day. Recovery is training now — sleep and nutrition matter as much as any session.';
+      else if (type === 'easy') detail = `<strong>TAPER — 40 min Z2.</strong> HR under ${z2hr} bpm · ${z2w}W. About half your normal endurance volume — legs should feel fresher each day now.`;
+      else if (type === 'threshold') detail = `<strong>TAPER — 2×8 min at race pace.</strong> ${z4low}–${z4hiw}W est · ${z4lo}–${z4hi} bpm. Same intensity as always, just fewer reps. Full recovery between efforts.`;
+      else if (type === 'social') detail = `<strong>TAPER — 1–1.5 h easy social ride.</strong> Skip the hard climbing efforts this week — spin the legs, enjoy the company.`;
+      else if (type === 'fatigue') detail = `<strong>TAPER — 45 min easy then 2×6 min at race pace.</strong> ${z4low}–${z4hiw}W est. Keep the legs sharp without digging any fatigue hole — no more big efforts from here.`;
+      else if (type === 'long') detail = `<strong>TAPER — ${isUCI?'55–65 km, minimal climbing':'40–50 km'}.</strong> Roughly half your recent long-ride distance. Z2 pace throughout, practice your race nutrition timing one more time.`;
+    } else if (weeksOut !== null && weeksOut <= 3 && weeksOut > 2) {
+      // Sharpen phase — 3 weeks out
       if (type === 'rest') detail = 'Rest day. Recovery is training. Sleep and nutrition are critical in the final weeks.';
       else if (type === 'easy') detail = `<strong>SHARPEN — 75 min Z2.</strong> HR under ${z2hr} bpm · ${z2w}W. Reduce volume slightly but keep the quality.`;
       else if (type === 'threshold') detail = `<strong>SHARPEN — 3×10 min race pace.</strong> Slightly shorter than base phase. ${z4low}–${z4hiw}W est · ${z4lo}–${z4hi} bpm. Focus on smooth, efficient effort.`;
@@ -1888,7 +2064,8 @@ function getPhaseDesc(phase) {
     'Base': 'Focus on aerobic base, long Z2 rides and building consistency.',
     'Build': 'Adding threshold intervals and climbing-specific work.',
     'Sharpen': 'Race simulation efforts and dialling in your pacing strategy.',
-    'Taper': 'Reducing volume, keeping intensity. Trust your training.',
+    'Taper': 'Volume cut by roughly half, intensity kept but shortened. Legs should start feeling fresher.',
+    'Race Week': 'Volume cut by roughly 70%, just enough sharpness to stay ready. Trust your training.',
     'Post-race': 'Recovery and reflection. Well done!'
   };
   return desc[phase] || '';
