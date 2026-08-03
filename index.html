@@ -1065,6 +1065,15 @@ async function resetScheduleDay(dateStr) {
   }
 }
 
+function addScheduleNote(text, tone) {
+  const c = document.getElementById('chat-msgs');
+  const d = document.createElement('div');
+  d.style.cssText = `text-align:center;font-size:11px;color:${tone==='dismiss'?'var(--mist)':'var(--green)'};margin:4px 0;padding:2px 0`;
+  d.textContent = text;
+  c.appendChild(d);
+  c.scrollTop = c.scrollHeight;
+}
+
 async function applyScheduleChange(change, btnEl) {
   btnEl.disabled = true;
   btnEl.textContent = 'Applying…';
@@ -1080,7 +1089,11 @@ async function applyScheduleChange(change, btnEl) {
     renderWeekDetail();
     renderCalendar();
     const card = btnEl.closest('.schedule-proposal-card');
-    if (card) card.innerHTML = `<div style="color:var(--green);font-size:12px">✓ Applied to your calendar — check the Calendar tab.</div>`;
+    if (card) card.innerHTML = `<div style="color:var(--green);font-size:12px">✓ Confirmed and applied to your calendar.</div>`;
+    const dateLabel = new Date(change.date + 'T00:00:00').toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'short' });
+    addScheduleNote(`✓ You confirmed: ${change.title} — ${dateLabel}`, 'confirm');
+    chatHistory.push({ role:'user', content: `[Schedule change confirmed and applied] ${dateLabel}: "${change.title}" — ${change.detail}` });
+    if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
   } catch (e) {
     btnEl.disabled = false;
     btnEl.textContent = 'Confirm & apply';
@@ -1090,7 +1103,16 @@ async function applyScheduleChange(change, btnEl) {
 
 function dismissScheduleProposal(btnEl) {
   const card = btnEl.closest('.schedule-proposal-card');
-  if (card) card.remove();
+  if (!card) return;
+  let p = {};
+  try { p = JSON.parse(card.dataset.proposal || '{}'); } catch (e) {}
+  card.innerHTML = `<div style="color:var(--mist);font-size:12px">✕ Dismissed — no changes made.</div>`;
+  if (p.date && p.title) {
+    const dateLabel = new Date(p.date + 'T00:00:00').toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'short' });
+    addScheduleNote(`✕ You dismissed: ${p.title} — ${dateLabel}`, 'dismiss');
+    chatHistory.push({ role:'user', content: `[Schedule change dismissed — not applied] ${dateLabel}: "${p.title}". Please don't assume this change happened.` });
+    if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+  }
 }
 
 async function applyAllScheduleChanges(groupId, btnEl) {
@@ -1117,7 +1139,20 @@ async function applyAllScheduleChanges(groupId, btnEl) {
 
 function dismissAllScheduleProposals(groupId) {
   const group = document.getElementById(groupId);
-  if (group) group.remove();
+  if (!group) return;
+  const cards = Array.from(group.querySelectorAll('.schedule-proposal-card'));
+  const titles = [];
+  cards.forEach(card => {
+    let p = {};
+    try { p = JSON.parse(card.dataset.proposal || '{}'); } catch (e) {}
+    if (p.title) titles.push(p.title);
+    card.innerHTML = `<div style="color:var(--mist);font-size:12px">✕ Dismissed — no changes made.</div>`;
+  });
+  const header = group.querySelector('div');
+  if (header) header.remove();
+  addScheduleNote(`✕ You dismissed all ${cards.length} proposed changes`, 'dismiss');
+  chatHistory.push({ role:'user', content: `[All ${cards.length} proposed schedule changes dismissed — none applied] ${titles.join('; ')}. Please don't assume any of these happened.` });
+  if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
 }
 
 function handleStravaRedirectParams() {
