@@ -1024,6 +1024,15 @@ function initApp() {
   }
 }
 
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 async function loadScheduleOverrides() {
   try {
     const { data, error } = await sb.from('schedule_overrides').select('date,session_type,title,description').eq('user_id', currentUser.id);
@@ -1749,9 +1758,9 @@ async function send() {
         card.style.cssText = `background:var(--asphalt);border:1px solid ${hasRisk?'#5A2010':'var(--gravel)'};border-radius:var(--r);padding:12px 14px;margin-bottom:8px;font-size:13px`;
         card.innerHTML = `
           <div style="font-size:11px;color:var(--mist);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Proposed change · ${dateLabel}</div>
-          <div style="font-weight:600;margin-bottom:2px">${p.title}</div>
-          <div style="color:var(--fog);margin-bottom:${hasRisk?'8px':'10px'}">${p.detail}</div>
-          ${hasRisk ? `<div style="background:var(--orange-lo);border:1px solid #5A2010;border-radius:6px;padding:6px 10px;color:#FFB085;font-size:12px;margin-bottom:10px">⚠️ ${p.risk_note}</div>` : ''}
+          <div style="font-weight:600;margin-bottom:2px">${escapeHtml(p.title)}</div>
+          <div style="color:var(--fog);margin-bottom:${hasRisk?'8px':'10px'}">${escapeHtml(p.detail)}</div>
+          ${hasRisk ? `<div style="background:var(--orange-lo);border:1px solid #5A2010;border-radius:6px;padding:6px 10px;color:#FFB085;font-size:12px;margin-bottom:10px">⚠️ ${escapeHtml(p.risk_note)}</div>` : ''}
           <div style="display:flex;gap:8px">
             <button class="btn-primary sp-confirm-btn" style="margin:0;padding:6px 12px;font-size:12px;flex:none" onclick='applyScheduleChange(${JSON.stringify(p).replace(/'/g,"&#39;")}, this)'>Confirm &amp; apply</button>
             <button class="skip-btn sp-dismiss-btn" style="padding:6px 12px;font-size:12px;flex:none" onclick="dismissScheduleProposal(this)">Dismiss</button>
@@ -1894,7 +1903,7 @@ function renderCalendar() {
       const cls = isRace ? 'race' : type;
       const weekOffset = Math.floor((date - getMonday(today)) / (7 * 86400000));
       daysHtml += `<div class="cal-day ${cls}${isToday?' today':''}${isPast?' past':''}" style="${override?'box-shadow:0 0 0 1.5px var(--orange-hi) inset;':''}"
-        title="${isRace?'RACE DAY!':(override?'✎ '+override.title:DAY_LABELS[type])}" 
+        title="${isRace?'RACE DAY!':(override?'✎ '+escapeHtml(override.title):DAY_LABELS[type])}" 
         onclick="event.stopPropagation();showWeekFromDate('${dateStr}')">${day}</div>`;
     }
 
@@ -1989,7 +1998,7 @@ function renderWeekDetail() {
 
     let detail = '';
     if (override) {
-      detail = `<strong>${override.title}</strong> ${override.description} <span style="color:var(--mist);font-size:11px">✎ Adjusted with your coach — <a href="#" onclick="resetScheduleDay('${dateStr}');return false;" style="color:var(--orange-hi)">reset to default</a></span>`;
+      detail = `<strong>${escapeHtml(override.title)}</strong> ${escapeHtml(override.description)} <span style="color:var(--mist);font-size:11px">✎ Adjusted with your coach — <a href="#" onclick="resetScheduleDay('${dateStr}');return false;" style="color:var(--orange-hi)">reset to default</a></span>`;
     } else if (isRace) {
       detail = `<strong>🏁 RACE DAY — ${userProfile.goal_event||'Your event'}!</strong> Everything you have trained for. Stick to your pacing plan. Enjoy every kilometre!`;
     } else if (weeksOut !== null && weeksOut <= 1 && weeksOut > 0) {
