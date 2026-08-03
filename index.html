@@ -271,6 +271,9 @@ select:focus { border-color:var(--orange); }
   <div class="auth-card">
     <div class="auth-logo">VAMIQ</div>
     <div class="auth-tag">AI-powered cycling coach for UCI Gran Fondo qualifiers</div>
+    <div style="font-size:11px;color:var(--mist);margin-bottom:1rem;text-align:center">
+      By continuing you agree to our <a href="/privacy.html" target="_blank" style="color:var(--orange-hi)">Privacy Policy</a>
+    </div>
     <div class="auth-tabs">
       <button class="auth-tab active" onclick="switchTab('login')">Sign in</button>
       <button class="auth-tab" onclick="switchTab('signup')">Create account</button>
@@ -433,7 +436,15 @@ select:focus { border-color:var(--orange); }
     <div id="step-4" style="display:none">
       <div class="onboard-title">Connect Strava</div>
       <div class="onboard-desc">VAMIQ analyses your rides to personalise your training plan. Click Connect Strava and authorise — you'll be brought straight back here automatically.</div>
-      <button class="strava-connect" onclick="connectStrava()">
+      <div class="box box-yellow" style="font-size:12px;line-height:1.6;margin-bottom:0.75rem">
+        <strong>What we'll access:</strong> your ride activities (distance, time, elevation, heart rate, power, cadence, GPS route, segments). We use this only to show you your own training data and to power your AI coach's advice to you — it's never shown to other users or used to train any AI model.
+        You can disconnect and delete this data at any time from Profile, or by emailing <a href="mailto:support@vamiq.au" style="color:var(--orange-hi)">support@vamiq.au</a>. Full details in our <a href="/privacy.html" target="_blank" style="color:var(--orange-hi)">Privacy Policy</a>.
+      </div>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--fog);margin-bottom:0.85rem;cursor:pointer">
+        <input type="checkbox" id="ob-strava-consent" onchange="const b=document.getElementById('ob-strava-connect-btn'); b.disabled=!this.checked; b.style.opacity=this.checked?'1':'0.5'; b.style.cursor=this.checked?'pointer':'not-allowed';" style="margin-top:2px">
+        <span>I understand what data VAMIQ will access from my Strava account and how it's used, as described above.</span>
+      </label>
+      <button class="strava-connect" id="ob-strava-connect-btn" onclick="connectStrava()" disabled style="opacity:0.5;cursor:not-allowed">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
         Connect Strava
       </button>
@@ -467,6 +478,7 @@ select:focus { border-color:var(--orange); }
     <button class="nav-tab" onclick="show('goals',this)">My goal</button>
     <button class="nav-tab" onclick="show('profile',this)">Profile</button>
     <button class="nav-tab" onclick="show('coach',this)">Ask coach</button>
+    <button class="nav-tab" onclick="show('help',this)">Help</button>
   </nav>
 
   <!-- DASHBOARD -->
@@ -616,18 +628,25 @@ select:focus { border-color:var(--orange); }
       </div>
       <div id="strava-profile-disconnected" class="box box-orange" style="display:none">
         <strong>⚠️ Strava not connected</strong><br>
-        <span style="font-size:12px">Connect Strava to sync your rides and get personalised coaching.</span>
+        <span style="font-size:12px">Connect Strava to sync your rides and get personalised coaching. We access ride distance, time, elevation, HR, power, cadence, GPS route and segments — shown only to you, never to other users or used to train AI models. See our <a href="/privacy.html" target="_blank" style="color:var(--orange-hi)">Privacy Policy</a>.</span>
       </div>
       <button id="strava-connect-btn" onclick="reconnectStrava()" class="strava-connect" style="margin-top:0.75rem;display:none">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
         Connect Strava
       </button>
+      <button id="strava-disconnect-btn" onclick="disconnectStrava()" class="skip-btn" style="margin-top:0.75rem;display:none;color:#FF8585;border-color:#5A1010">
+        Disconnect Strava &amp; delete my Strava data
+      </button>
+      <div id="strava-disconnect-status" style="display:none;margin-top:0.5rem"></div>
     </div>
 
     <div style="margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid var(--gravel)">
       <p class="slabel">Account</p>
       <div style="font-size:13px;color:var(--mist);margin-bottom:0.75rem" id="profile-email"></div>
       <button class="skip-btn" onclick="if(confirm('Sign out of VAMIQ?')) sb.auth.signOut()">Sign out</button>
+      <p style="font-size:11px;color:var(--mist);margin-top:0.75rem">
+        Want your account and all data deleted entirely? Email <a href="mailto:support@vamiq.au" style="color:var(--orange-hi)">support@vamiq.au</a> — we'll confirm once it's done, within 30 days.
+      </p>
     </div>
   </div>
 
@@ -651,6 +670,39 @@ select:focus { border-color:var(--orange); }
         <textarea class="cinput" id="cinput" placeholder="Ask your coach anything..." rows="1"></textarea>
         <button class="sbtn" id="sbtn" onclick="send()">Send</button>
       </div>
+    </div>
+  </div>
+
+  <!-- HELP -->
+  <div id="help" class="panel">
+    <p class="slabel">About VAMIQ</p>
+    <div class="box box-green">
+      VAMIQ is an AI-powered training coach for cyclists. It connects to your Strava account, builds a personalised weekly training plan around your goal, and lets you chat with an AI coach that understands your recent riding.
+    </div>
+
+    <p class="slabel" style="margin-top:1.25rem">Your data & privacy</p>
+    <div class="box box-orange" style="line-height:1.7">
+      <strong>What we access from Strava:</strong> ride distance, time, elevation, heart rate, power, cadence, GPS route and segments — only for rides you've done, and only after you explicitly connect your account.<br><br>
+      <strong>Who sees it:</strong> only you. Your ride data is never shown to other VAMIQ users, sold, or used to train any AI model.<br><br>
+      <strong>How it's used:</strong> to show you your own dashboard, training zones and calendar, and to give your AI coach context so it can answer your questions about your own training.<br><br>
+      <strong>Disconnecting:</strong> you can disconnect Strava and permanently delete your Strava data from VAMIQ at any time in <strong>Profile → Strava connection</strong>.<br><br>
+      Full details are in our <a href="/privacy.html" target="_blank" style="color:var(--orange-hi)">Privacy Policy</a>.
+    </div>
+
+    <p class="slabel" style="margin-top:1.25rem">Frequently asked questions</p>
+    <div class="tl">
+      <div class="tl-row"><div class="tl-text"><strong>Does the AI coach train on my Strava data?</strong><br>No. Your ride data is used only to answer your own questions in your own coaching chat — it's never used to train, fine-tune, or improve any AI model.</div></div>
+      <div class="tl-row"><div class="tl-text"><strong>Can other users see my rides or my goal?</strong><br>No. Every athlete's data is private to their own account. Nothing is shared, aggregated, or shown to anyone else.</div></div>
+      <div class="tl-row"><div class="tl-text"><strong>How do I disconnect Strava?</strong><br>Go to Profile → Strava connection → "Disconnect Strava & delete my Strava data." This removes our stored access to your account and deletes the tokens immediately — you can reconnect any time.</div></div>
+      <div class="tl-row"><div class="tl-text"><strong>How do I delete my whole VAMIQ account?</strong><br>Email <a href="mailto:support@vamiq.au" style="color:var(--orange-hi)">support@vamiq.au</a> and we'll delete your account and all associated data within 30 days, with written confirmation once it's done.</div></div>
+      <div class="tl-row"><div class="tl-text"><strong>Why do I need to reconnect Strava sometimes?</strong><br>Strava access tokens occasionally expire or get revoked (e.g. if you change your Strava password). If sync stops working, just hit "Reconnect" in Profile.</div></div>
+      <div class="tl-row"><div class="tl-text"><strong>Does VAMIQ cost anything?</strong><br>VAMIQ is currently free while in beta.</div></div>
+      <div class="tl-row"><div class="tl-text"><strong>Is my Strava data backed up or stored long-term?</strong><br>No — we don't keep a long-term copy of your ride history. We fetch it fresh from Strava each time you sync.</div></div>
+    </div>
+
+    <p class="slabel" style="margin-top:1.25rem">Still need help?</p>
+    <div class="box box-green">
+      Email us any time at <a href="mailto:support@vamiq.au" style="color:#85DBA8;font-weight:600">support@vamiq.au</a> — we read every message and aim to reply within a couple of days.
     </div>
   </div>
 </div>
@@ -1185,6 +1237,38 @@ async function reconnectStrava() {
   await startStravaAuth();
 }
 
+async function disconnectStrava() {
+  if (!confirm('Disconnect Strava and permanently delete your Strava data from VAMIQ? This can\'t be undone — you can reconnect any time.')) return;
+
+  const statusEl = document.getElementById('strava-disconnect-status');
+  statusEl.style.display = 'block';
+  statusEl.style.color = 'var(--mist)';
+  statusEl.style.fontSize = '12px';
+  statusEl.textContent = 'Disconnecting…';
+
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { statusEl.textContent = 'Please sign in again.'; return; }
+    const r = await fetch('/api/strava-disconnect', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + session.access_token }
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Could not disconnect');
+
+    userProfile = { ...userProfile, strava_access_token: null, strava_refresh_token: null };
+    document.getElementById('strava-pill').style.display = 'none';
+    document.getElementById('rides-list').innerHTML = '<p style="color:var(--mist);font-size:13px">Click ↻ Sync to load your rides.</p>';
+    loadProfileTab();
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = '✓ Disconnected — your Strava data has been deleted from VAMIQ.';
+    setTimeout(() => { statusEl.style.display = 'none'; }, 6000);
+  } catch (e) {
+    statusEl.style.color = '#FF8585';
+    statusEl.textContent = 'Could not disconnect: ' + e.message + '. Please try again or email support@vamiq.au.';
+  }
+}
+
 function loadProfileTab() {
   if (!userProfile) return;
   const p = userProfile;
@@ -1194,6 +1278,7 @@ function loadProfileTab() {
   document.getElementById('strava-profile-status').style.display = isConnected ? 'block' : 'none';
   document.getElementById('strava-profile-disconnected').style.display = isConnected ? 'none' : 'block';
   document.getElementById('strava-connect-btn').style.display = isConnected ? 'none' : 'flex';
+  document.getElementById('strava-disconnect-btn').style.display = isConnected ? 'block' : 'none';
 
   // Show account email
   const emailEl = document.getElementById('profile-email');
@@ -1549,7 +1634,7 @@ function addTyping() {
 
 function qa(q) {
   document.getElementById('cinput').value = q;
-  show('coach', document.querySelectorAll('.nav-tab')[5]);
+  show('coach', document.querySelectorAll('.nav-tab')[6]);
   send();
 }
 
