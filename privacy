@@ -1,1 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy — VAMIQ</title>
+<meta name="description" content="VAMIQ Privacy Policy — how we collect, use, store and delete your data.">
+<meta name="theme-color" content="#E8500A">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --black:#0E0F0D; --asphalt:#1C1E1A; --gravel:#2E3029;
+  --mist:#8A9080; --fog:#C4CBB8; --white:#F2F4EE;
+  --orange:#E8500A; --orange-hi:#FF7A40; --r:8px;
+  --font-head:'Rajdhani',Georgia,serif; --font-body:'Helvetica Neue',Arial,sans-serif;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--black); color:var(--fog); font-family:var(--font-body); font-size:15px; line-height:1.7; }
+.wrap { max-width:760px; margin:0 auto; padding:2.5rem 1.5rem 5rem; }
+.logo { font-family:var(--font-head); font-size:26px; font-weight:bold; letter-spacing:4px; color:var(--orange); margin-bottom:0.25rem; }
+.updated { font-size:12px; color:var(--mist); margin-bottom:2rem; padding-bottom:1.5rem; border-bottom:1px solid var(--gravel); }
+h1 { font-family:var(--font-head); font-size:28px; margin-bottom:0.5rem; color:var(--white); }
+h2 { font-family:var(--font-head); font-size:18px; color:var(--orange-hi); margin:2rem 0 0.75rem; text-transform:uppercase; letter-spacing:0.03em; }
+p { margin-bottom:0.9rem; }
+ul { margin:0 0 0.9rem 1.25rem; }
+li { margin-bottom:0.4rem; }
+a { color:var(--orange-hi); }
+strong { color:var(--white); }
+.box { background:var(--asphalt); border:1px solid var(--gravel); border-radius:var(--r); padding:1rem 1.25rem; margin:1rem 0; font-size:14px; }
+table { width:100%; border-collapse:collapse; margin:0.75rem 0 1.25rem; font-size:13.5px; }
+th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--gravel); }
+th { color:var(--mist); font-size:11px; text-transform:uppercase; letter-spacing:0.05em; }
+.back { display:inline-block; margin-top:2.5rem; color:var(--mist); font-size:13px; text-decoration:none; }
+.back:hover { color:var(--orange-hi); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">VAMIQ</div>
+  <h1>Privacy Policy</h1>
+  <div class="updated">Effective: 29 July 2026 &nbsp;·&nbsp; Last updated: 29 July 2026</div>
+
+  <p>VAMIQ ("VAMIQ", "we", "us") provides an AI-powered training coaching app for cyclists at <a href="https://vamiq.au">vamiq.au</a>. This policy explains what personal data we collect, how we use it, who we share it with, and the choices and rights you have — including specifically around data we access from Strava.</p>
+
+  <p>If you have any questions, email us at <a href="mailto:support@vamiq.au">support@vamiq.au</a>.</p>
+
+  <h2>1. Who we are</h2>
+  <p>VAMIQ is operated by Tim Dugan, based in Melbourne, Australia. We are the data controller for the personal data described in this policy.</p>
+
+  <h2>2. What data we collect</h2>
+  <table>
+    <tr><th>Category</th><th>Examples</th><th>Source</th></tr>
+    <tr><td>Account data</td><td>Email address, hashed password</td><td>You, at sign-up</td></tr>
+    <tr><td>Profile data</td><td>Name, age, weight, experience level, training goal, target event and date, hours available to train, FTP</td><td>You, during onboarding or Profile edits</td></tr>
+    <tr><td>Strava activity data</td><td>Ride distance, duration, elevation, heart rate, power, cadence, GPS route, segment efforts, PRs</td><td>Strava API, only after you connect your account</td></tr>
+    <tr><td>Strava connection data</td><td>OAuth access and refresh tokens</td><td>Strava, when you authorise the connection</td></tr>
+    <tr><td>Coaching chat data</td><td>Messages you send to and receive from the AI coach</td><td>You, while using the app</td></tr>
+    <tr><td>Technical data</td><td>Timezone, device/browser type (via standard hosting logs)</td><td>Automatically, while using the app</td></tr>
+  </table>
+
+  <div class="box">
+    <strong>Strava data, specifically:</strong> we only access your Strava data after you click "Connect Strava" and explicitly authorise VAMIQ through Strava's own consent screen. We request read-only access (<code>activity:read_all</code>) — VAMIQ can never post, modify, or delete anything on your Strava account.
+  </div>
+
+  <h2>3. How we use your data</h2>
+  <ul>
+    <li>To create and personalise your training plan, calendar, and zones</li>
+    <li>To calculate your dashboard metrics (estimated FTP, W/kg, goal readiness, etc.) from your own ride history</li>
+    <li>To give your AI coach the context it needs to answer your questions about your own training — your ride data is included in the conversation you have with your coach, but is never used to train, fine-tune, or evaluate any AI model, and is never shown to any other user</li>
+    <li>To operate core account features (login, password reset, saving your profile and goal)</li>
+    <li>To provide customer support when you contact us</li>
+  </ul>
+
+  <h2>4. Who we share data with</h2>
+  <p>We use a small number of service providers ("subprocessors") to run VAMIQ. We don't sell your data, and we don't share your Strava data with any other VAMIQ user or with advertisers.</p>
+  <table>
+    <tr><th>Provider</th><th>Purpose</th><th>Location</th></tr>
+    <tr><td>Supabase</td><td>Account authentication and database storage</td><td>Singapore (AWS)</td></tr>
+    <tr><td>Vercel</td><td>App hosting</td><td>Global edge network</td></tr>
+    <tr><td>Anthropic (Claude)</td><td>Powers the AI coach chat — your messages and relevant ride context are sent to Claude to generate a response</td><td>See Anthropic's own privacy policy</td></tr>
+    <tr><td>Strava</td><td>Source of your ride data, via API you explicitly authorise</td><td>See Strava's own privacy policy</td></tr>
+  </table>
+  <p>We may also disclose data if required by law, or to protect the rights, safety, or property of VAMIQ, our users, or others.</p>
+
+  <h2>5. How long we keep your data</h2>
+  <ul>
+    <li><strong>Strava activity data</strong> is not stored long-term. We fetch it fresh from Strava's API each time you sync, and it lives only in your browser session and the momentary server request used to build your coaching context.</li>
+    <li><strong>Strava OAuth tokens</strong> are stored only for as long as your Strava connection remains active, and are deleted immediately if you disconnect Strava or delete your account.</li>
+    <li><strong>Profile and account data</strong> is kept for as long as your account exists.</li>
+    <li>If you delete an activity on Strava, it will stop appearing in VAMIQ within 48 hours (on your next sync).</li>
+  </ul>
+
+  <h2>6. Your rights and choices</h2>
+  <ul>
+    <li><strong>Access:</strong> you can view all your profile and goal data any time in the Profile tab.</li>
+    <li><strong>Withdraw Strava consent / disconnect:</strong> go to Profile → Strava connection → "Disconnect Strava & delete my Strava data." This immediately revokes VAMIQ's access with Strava and deletes our stored tokens. You can reconnect at any time.</li>
+    <li><strong>Delete your account:</strong> email <a href="mailto:support@vamiq.au">support@vamiq.au</a>. We'll delete your account and all associated data within 30 days and confirm in writing once it's done.</li>
+    <li><strong>Correct your data:</strong> update your details any time in the Profile tab.</li>
+    <li>If you're in the EEA or UK, you have additional rights under the GDPR/UK GDPR, including the right to data portability and to lodge a complaint with your local supervisory authority.</li>
+  </ul>
+
+  <h2>7. Security</h2>
+  <p>Passwords are hashed and never stored in plain text. Our database uses Row Level Security so you can only ever access your own data. All data is transmitted over encrypted HTTPS connections. API keys and secrets are held only on our servers and never exposed in the app you download or view in your browser.</p>
+
+  <h2>8. Children's privacy</h2>
+  <p>VAMIQ is not directed to, and we do not knowingly collect data from, children under 13 (or the relevant minimum age in your region).</p>
+
+  <h2>9. Changes to this policy</h2>
+  <p>We may update this policy from time to time. If we make material changes, we'll update the "last updated" date above and, where appropriate, notify you in the app.</p>
+
+  <h2>10. Contact us</h2>
+  <p>Questions, requests, or concerns about your data: <a href="mailto:support@vamiq.au">support@vamiq.au</a></p>
+
+  <a class="back" href="/">← Back to VAMIQ</a>
+</div>
+</body>
+</html>
 
