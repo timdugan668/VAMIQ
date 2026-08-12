@@ -1079,26 +1079,41 @@ async function applyScheduleChange(change, btnEl) {
   btnEl.textContent = 'Applying…';
 
   // Step 1: the actual save. This is the ONLY thing that determines success/failure.
-  let saveOk = false;
+  // Broken into small labelled steps so if something fails, the alert tells us
+  // exactly which step and exactly what the browser said — no DevTools needed.
+  let step = 'starting';
   try {
+    step = 'getting session';
     const { data: { session } } = await sb.auth.getSession();
-    if (!session) throw new Error('Please sign in again');
+    if (!session) throw new Error('No active session — please sign in again');
+
+    step = 'checking session token';
+    if (typeof session.access_token !== 'string' || !session.access_token) {
+      throw new Error('Session token missing or invalid type: ' + typeof session.access_token);
+    }
+
+    step = 'building request';
+    const payload = { action: 'set', date: change.date, session_type: change.type, title: change.title, detail: change.detail };
+    const bodyStr = JSON.stringify(payload);
+
+    step = 'sending request';
     const r = await fetch('/api/schedule-apply', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'set', date: change.date, session_type: change.type, title: change.title, detail: change.detail })
+      body: bodyStr
     });
+
+    step = 'reading response';
     if (!r.ok) {
-      let msg = 'Could not apply';
+      let msg = 'Server rejected the request (status ' + r.status + ')';
       try { const e = await r.json(); msg = e.error || msg; } catch (e2) {}
       throw new Error(msg);
     }
-    saveOk = true;
   } catch (e) {
-    console.error('applyScheduleChange: save failed', e);
+    console.error('applyScheduleChange failed at step: ' + step, e);
     btnEl.disabled = false;
     btnEl.textContent = 'Confirm & apply';
-    alert('Could not apply that change: ' + e.message);
+    alert('Could not apply that change.\n\nStep: ' + step + '\nError type: ' + (e.name || 'Unknown') + '\nMessage: ' + e.message);
     return;
   }
 
