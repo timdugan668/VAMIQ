@@ -1077,17 +1077,38 @@ function addScheduleNote(text, tone) {
 async function applyScheduleChange(change, btnEl) {
   btnEl.disabled = true;
   btnEl.textContent = 'Applying…';
+
+  // Step 1: the actual save. This is the ONLY thing that determines success/failure.
+  let saveOk = false;
   try {
     const { data: { session } } = await sb.auth.getSession();
+    if (!session) throw new Error('Please sign in again');
     const r = await fetch('/api/schedule-apply', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'set', date: change.date, session_type: change.type, title: change.title, detail: change.detail })
     });
-    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Could not apply'); }
+    if (!r.ok) {
+      let msg = 'Could not apply';
+      try { const e = await r.json(); msg = e.error || msg; } catch (e2) {}
+      throw new Error(msg);
+    }
+    saveOk = true;
+  } catch (e) {
+    console.error('applyScheduleChange: save failed', e);
+    btnEl.disabled = false;
+    btnEl.textContent = 'Confirm & apply';
+    alert('Could not apply that change: ' + e.message);
+    return;
+  }
+
+  // Step 2: cosmetic follow-up (UI refresh, chat note). The save already
+  // succeeded above, so nothing here should ever be reported to the user as
+  // a failure — at worst we log it and the athlete can refresh the Calendar tab.
+  try {
     scheduleOverrides[change.date] = { session_type: change.type, title: change.title, description: change.detail };
-    renderWeekDetail();
-    renderCalendar();
+    try { renderWeekDetail(); } catch (e) { console.error('renderWeekDetail failed after save', e); }
+    try { renderCalendar(); } catch (e) { console.error('renderCalendar failed after save', e); }
     const card = btnEl.closest('.schedule-proposal-card');
     if (card) card.innerHTML = `<div style="color:var(--green);font-size:12px">✓ Confirmed and applied to your calendar.</div>`;
     const dateLabel = new Date(change.date + 'T00:00:00').toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'short' });
@@ -1095,9 +1116,7 @@ async function applyScheduleChange(change, btnEl) {
     chatHistory.push({ role:'user', content: `[Schedule change confirmed and applied] ${dateLabel}: "${change.title}" — ${change.detail}` });
     if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
   } catch (e) {
-    btnEl.disabled = false;
-    btnEl.textContent = 'Confirm & apply';
-    alert('Could not apply that change: ' + e.message);
+    console.error('applyScheduleChange: cosmetic update failed (change WAS saved)', e);
   }
 }
 
@@ -1129,6 +1148,7 @@ async function applyAllScheduleChanges(groupId, btnEl) {
       const p = JSON.parse(card.dataset.proposal);
       await applyScheduleChange(p, confirmBtn);
     } catch (e) {
+      console.error('applyAllScheduleChanges: one change failed', e);
       failCount++;
     }
   }
