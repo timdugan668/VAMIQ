@@ -1,0 +1,2638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VAMIQ — AI Cycling Coach</title>
+<meta name="description" content="AI-powered cycling coach for UCI Gran Fondo qualifiers">
+<meta name="theme-color" content="#E8500A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="VAMIQ">
+<link rel="manifest" href="/manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root {
+  --black:#0E0F0D; --asphalt:#1C1E1A; --gravel:#2E3029;
+  --mist:#8A9080; --fog:#C4CBB8; --white:#F2F4EE;
+  --orange:#E8500A; --orange-lo:#3A1A08; --orange-hi:#FF7A40;
+  --green:#4CAF7D; --green-lo:#0D2B1C;
+  --yellow:#E8C30A; --yellow-lo:#2E2700;
+  --red:#E84040; --red-lo:#2E0A0A;
+  --strava:#FC4C02; --r:8px;
+  --font-head:'Rajdhani',Georgia,serif; --font-body:'Helvetica Neue',Arial,sans-serif;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--black); color:var(--white); font-family:var(--font-body); font-size:14px; line-height:1.5; min-height:100vh; }
+
+/* ── LOADING ── */
+#loading { position:fixed; inset:0; background:var(--black); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:16px; z-index:9999; }
+.vamiq-logo { font-family:var(--font-head); font-size:36px; font-weight:bold; letter-spacing:6px; color:var(--orange); }
+.vamiq-tag { font-size:12px; color:var(--mist); letter-spacing:2px; text-transform:uppercase; }
+.spinner { width:32px; height:32px; border:3px solid var(--gravel); border-top-color:var(--orange); border-radius:50%; animation:spin 0.8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+@keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
+
+/* ── AUTH SCREEN ── */
+#auth { display:none; min-height:100vh; align-items:center; justify-content:center; padding:1.5rem; }
+.auth-card { background:var(--asphalt); border:1px solid var(--gravel); border-radius:16px; padding:2rem; max-width:420px; width:100%; }
+.auth-logo { font-family:var(--font-head); font-size:28px; font-weight:bold; letter-spacing:4px; color:var(--orange); margin-bottom:4px; }
+.auth-tag { font-size:12px; color:var(--mist); margin-bottom:1.5rem; padding-bottom:1.5rem; border-bottom:1px solid var(--gravel); }
+.auth-tabs { display:flex; gap:0; margin-bottom:1.5rem; background:var(--gravel); border-radius:var(--r); padding:3px; }
+.auth-tab { flex:1; padding:8px; text-align:center; font-size:13px; font-weight:500; cursor:pointer; border-radius:6px; border:none; background:none; color:var(--mist); transition:all 0.15s; }
+.auth-tab.active { background:var(--asphalt); color:var(--white); }
+.field { margin-bottom:1rem; }
+.field label { display:block; font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--mist); margin-bottom:6px; }
+.field input { width:100%; background:var(--gravel); border:1px solid #3E4239; border-radius:var(--r); padding:10px 12px; color:var(--white); font-size:14px; outline:none; }
+.field input:focus { border-color:var(--orange); }
+.field-hint { font-size:11px; color:var(--mist); margin-top:4px; }
+.field-hint.error { color:#FF8585; }
+.field-hint.success { color:var(--green); }
+.btn-primary { width:100%; background:var(--orange); color:#fff; border:none; border-radius:var(--r); padding:12px; font-size:14px; font-weight:700; cursor:pointer; margin-top:0.5rem; }
+.btn-primary:hover { opacity:0.88; }
+.btn-primary:disabled { opacity:0.4; cursor:not-allowed; }
+.auth-divider { text-align:center; font-size:12px; color:var(--mist); margin:1rem 0; }
+.pw-rules { font-size:11px; color:var(--mist); margin-top:4px; line-height:1.6; }
+.pw-rule { display:flex; align-items:center; gap:5px; }
+.pw-rule.ok { color:var(--green); }
+.pw-rule.fail { color:var(--mist); }
+
+/* ── ONBOARDING ── */
+#onboarding { display:none; min-height:100vh; align-items:center; justify-content:center; padding:1.5rem; }
+.onboard-card { background:var(--asphalt); border:1px solid var(--gravel); border-radius:16px; padding:2rem; max-width:480px; width:100%; }
+.onboard-logo { font-family:var(--font-head); font-size:22px; font-weight:bold; letter-spacing:3px; color:var(--orange); margin-bottom:4px; }
+.onboard-step { font-size:11px; color:var(--mist); margin-bottom:1.5rem; padding-bottom:1.5rem; border-bottom:1px solid var(--gravel); }
+.onboard-title { font-size:18px; font-weight:600; margin-bottom:6px; }
+.onboard-desc { font-size:13px; color:var(--mist); margin-bottom:1.5rem; line-height:1.5; }
+.step-dots { display:flex; gap:6px; margin-bottom:1.5rem; }
+.dot { width:8px; height:8px; border-radius:50%; background:var(--gravel); }
+.dot.active { background:var(--orange); }
+.dot.done { background:var(--green); }
+.form-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+select { width:100%; background:var(--gravel); border:1px solid #3E4239; border-radius:var(--r); padding:10px 12px; color:var(--white); font-size:14px; outline:none; }
+select:focus { border-color:var(--orange); }
+.goal-cards { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:1rem; }
+.goal-card { background:var(--gravel); border:2px solid var(--gravel); border-radius:var(--r); padding:12px; cursor:pointer; text-align:center; transition:all 0.15s; }
+.goal-card:hover { border-color:var(--mist); }
+.goal-card.selected { border-color:var(--orange); background:var(--orange-lo); }
+.goal-card .icon { font-size:24px; margin-bottom:6px; }
+.goal-card .name { font-size:12px; font-weight:600; color:var(--white); }
+.goal-card .desc { font-size:10px; color:var(--mist); margin-top:2px; }
+.btn-row { display:flex; gap:8px; margin-top:1rem; }
+.btn-back { flex:none; background:var(--gravel); color:var(--fog); border:none; border-radius:var(--r); padding:12px 18px; font-size:14px; cursor:pointer; }
+.btn-next { flex:1; background:var(--orange); color:#fff; border:none; border-radius:var(--r); padding:12px; font-size:14px; font-weight:700; cursor:pointer; }
+.btn-next:disabled { opacity:0.4; cursor:not-allowed; }
+.strava-connect { width:100%; background:var(--strava); color:#fff; border:none; border-radius:var(--r); padding:13px; font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:10px; }
+.skip-btn { width:100%; background:none; border:1px solid var(--gravel); color:var(--mist); border-radius:var(--r); padding:10px; font-size:13px; cursor:pointer; }
+
+/* ── MAIN APP ── */
+#app { display:none; flex-direction:column; min-height:100vh; }
+.app-header { background:var(--asphalt); border-bottom:1px solid var(--gravel); padding:0 1.25rem; display:flex; align-items:center; gap:12px; height:56px; position:sticky; top:0; z-index:100; }
+.app-header h1 { font-family:var(--font-head); font-size:20px; font-weight:bold; letter-spacing:2px; color:var(--orange); text-transform:uppercase; }
+.app-header .sub { font-size:11px; color:var(--mist); display:none; }
+@media(min-width:500px){.app-header .sub{display:block}}
+.header-right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+.strava-pill { background:var(--strava); color:#fff; font-size:11px; font-weight:600; padding:3px 10px; border-radius:20px; display:none; align-items:center; gap:4px; }
+.sync-btn { background:var(--gravel); color:var(--fog); font-size:12px; padding:5px 10px; border-radius:var(--r); border:1px solid #3E4239; cursor:pointer; }
+.user-btn { background:var(--orange-lo); color:var(--orange-hi); font-size:12px; padding:5px 10px; border-radius:var(--r); border:1px solid #5A2010; cursor:pointer; }
+
+.app-nav { background:var(--asphalt); border-bottom:1px solid var(--gravel); display:flex; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.app-nav::-webkit-scrollbar{display:none}
+.nav-tab { flex:none; padding:12px 16px; font-size:13px; color:var(--mist); background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; white-space:nowrap; }
+.nav-tab.active { color:var(--orange); border-bottom-color:var(--orange); font-weight:600; }
+
+.panel { display:none; padding:1.25rem; max-width:720px; margin:0 auto; width:100%; }
+.panel.active { display:block; }
+#coach.panel { padding:0; max-width:100%; }
+#coach.panel.active { display:flex; flex-direction:column; height:calc(100vh - 110px); }
+
+.slabel { font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--mist); margin-bottom:0.75rem; }
+.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; margin-bottom:1.25rem; }
+.card { background:var(--asphalt); border:1px solid var(--gravel); border-radius:var(--r); padding:0.85rem 1rem; }
+.card .lbl { font-size:11px; color:var(--mist); margin-bottom:4px; }
+.card .val { font-size:22px; font-weight:700; line-height:1.1; }
+.card .sub { font-size:11px; color:var(--mist); margin-top:3px; }
+.c-orange{color:var(--orange)} .c-green{color:var(--green)} .c-yellow{color:var(--yellow)}
+
+.box { border-radius:var(--r); padding:0.85rem 1rem; font-size:13px; line-height:1.6; margin-bottom:1rem; }
+.box-green{background:var(--green-lo);border:1px solid #1A4A30;color:#85DBA8}
+.box-orange{background:var(--orange-lo);border:1px solid #5A2010;color:#FFB085}
+.box-yellow{background:var(--yellow-lo);border:1px solid #4A3F00;color:#E8D070}
+.box-red{background:var(--red-lo);border:1px solid #5A1010;color:#FF8585}
+
+.prog-wrap{margin-bottom:0.85rem}
+.prog-label{display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;color:var(--fog)}
+.prog-bg{height:6px;background:var(--gravel);border-radius:20px;overflow:hidden}
+.prog-fill{height:100%;border-radius:20px;transition:width 0.8s ease}
+
+.tl{margin-bottom:1.25rem}
+.tl-row{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--gravel);font-size:13px}
+.tl-row:last-child{border-bottom:none}
+.tl-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.tl-date{color:var(--mist);width:100px;flex-shrink:0;font-size:12px}
+.tl-text{flex:1;color:var(--fog);line-height:1.5}
+.tl-text strong{color:var(--white)}
+.tl-badge{font-size:10px;padding:2px 8px;border-radius:20px;flex-shrink:0;align-self:flex-start;margin-top:2px}
+
+.ride-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--gravel);font-size:13px}
+.ride-row:last-child{border-bottom:none}
+.rdot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.rinfo{flex:1;min-width:0}
+.rname{font-weight:600;font-size:13px}
+.rmeta{color:var(--mist);font-size:11px;margin-top:1px}
+.rstat{text-align:right;flex-shrink:0}
+.rstat .big{font-weight:600}
+.rstat .sm{font-size:11px;color:var(--mist)}
+.tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:5px}
+.tg{background:var(--green-lo);color:var(--green)}
+.to{background:var(--orange-lo);color:var(--orange-hi)}
+
+.wk{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:1rem}
+.dc{border-radius:var(--r);border:1px solid var(--gravel);padding:8px 4px;text-align:center}
+.dc.indoor{border-style:dashed}
+.dc .dn{font-size:10px;color:var(--mist);margin-bottom:4px;font-weight:600}
+.dc .dt{font-size:10px;font-weight:700;margin-bottom:2px;line-height:1.3}
+.dc .dl{font-size:9px;color:var(--mist);line-height:1.3}
+.d-rest{background:var(--asphalt)}
+.d-easy{background:#0D2B1C;border-color:#1A4A30} .d-easy .dt{color:var(--green)}
+.d-thresh{background:#2A1A00;border-color:#4A3000} .d-thresh .dt{color:var(--yellow)}
+.d-social{background:#0A1830;border-color:#152A50} .d-social .dt{color:#6BA3E8}
+.d-fatigue{background:#1E0A00;border-color:#3A1500} .d-fatigue .dt{color:var(--orange-hi)}
+.d-long{background:#200800;border-color:#5A1A00} .d-long .dt{color:var(--orange)}
+
+.zrow{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--gravel);font-size:12px}
+.zrow:last-child{border-bottom:none}
+.zdot{width:11px;height:11px;border-radius:2px;flex-shrink:0}
+.zname{font-weight:600;width:120px;font-size:12px;flex-shrink:0}
+.zrange{width:110px;color:var(--fog);font-size:12px;flex-shrink:0}
+.zhr{width:110px;color:var(--mist);font-size:12px;flex-shrink:0}
+.znote{flex:1;font-size:11px;color:var(--mist);text-align:right}
+
+.chat-msgs{flex:1;overflow-y:auto;padding:1.25rem;display:flex;flex-direction:column;gap:12px;max-width:720px;margin:0 auto;width:100%}
+.msg{display:flex;gap:10px;align-items:flex-start;max-width:85%}
+.msg.user{align-self:flex-end;flex-direction:row-reverse}
+.mav{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+.msg.coach .mav{background:var(--orange-lo);color:var(--orange-hi);border:1px solid #5A2010}
+.msg.user .mav{background:var(--strava);color:#fff}
+.mbub{padding:10px 14px;border-radius:14px;font-size:13px;line-height:1.6;white-space:pre-wrap}
+.msg.coach .mbub{background:var(--asphalt);color:var(--fog);border:1px solid var(--gravel);border-radius:2px 14px 14px 14px}
+.msg.user .mbub{background:var(--orange-lo);color:#FFB085;border:1px solid #5A2010;border-radius:14px 2px 14px 14px}
+.typing{display:flex;gap:4px;align-items:center;padding:4px 0}
+.typing span{width:6px;height:6px;border-radius:50%;background:var(--mist);animation:bounce 1.2s infinite}
+.typing span:nth-child(2){animation-delay:0.2s}
+.typing span:nth-child(3){animation-delay:0.4s}
+
+.chat-foot{border-top:1px solid var(--gravel);background:var(--asphalt);padding:1rem;flex-shrink:0}
+.qps{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;max-width:720px;margin-left:auto;margin-right:auto}
+.qp{padding:5px 11px;border-radius:20px;border:1px solid var(--gravel);background:var(--asphalt);color:var(--mist);font-size:12px;cursor:pointer}
+.qp:hover{border-color:var(--orange);color:var(--orange-hi)}
+.irow{display:flex;gap:8px;max-width:720px;margin:0 auto}
+.cinput{flex:1;background:var(--gravel);border:1px solid #3E4239;border-radius:var(--r);padding:10px 14px;color:var(--white);font-size:14px;font-family:var(--font-body);outline:none;resize:none;min-height:44px;max-height:120px}
+.cinput:focus{border-color:var(--orange)}
+.sbtn{background:var(--orange);color:#fff;border:none;border-radius:var(--r);padding:10px 18px;font-size:14px;font-weight:700;cursor:pointer;align-self:flex-end}
+.sbtn:disabled{opacity:0.4;cursor:not-allowed}
+
+/* Goal panel */
+.goal-banner { background:var(--orange-lo); border:1px solid #5A2010; border-radius:var(--r); padding:1rem; margin-bottom:1.25rem; }
+.goal-banner .event { font-size:16px; font-weight:700; color:var(--white); margin-bottom:4px; }
+.goal-banner .details { font-size:12px; color:var(--orange-hi); }
+.edit-goal-btn { float:right; background:none; border:1px solid #5A2010; color:var(--orange-hi); font-size:11px; padding:3px 8px; border-radius:var(--r); cursor:pointer; }
+
+@media(max-width:500px){.panel{padding:1rem}.cards{grid-template-columns:repeat(2,1fr)}.wk{gap:4px}.dc{padding:6px 2px}.form-row{grid-template-columns:1fr}.goal-cards{grid-template-columns:1fr}}
+
+/* ── CALENDAR ── */
+.cal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; }
+.cal-title { font-family:var(--font-head); font-size:18px; font-weight:normal; }
+.cal-nav-btn { background:var(--gravel); border:1px solid #3E4239; color:var(--fog); padding:6px 14px; border-radius:var(--r); cursor:pointer; font-size:16px; }
+.cal-nav-btn:hover { background:#3E4239; }
+.cal-months { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; margin-bottom:1.25rem; }
+.cal-month { background:var(--asphalt); border:1px solid var(--gravel); border-radius:12px; overflow:hidden; cursor:pointer; transition:border-color 0.15s; }
+.cal-month:hover { border-color:var(--orange); }
+.cal-month.active { border-color:var(--orange); }
+.cal-month-header { padding:10px 14px; border-bottom:1px solid var(--gravel); display:flex; justify-content:space-between; align-items:center; }
+.cal-month-name { font-weight:600; font-size:14px; }
+.cal-month-phase { font-size:11px; color:var(--mist); }
+.cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; padding:8px; }
+.cal-day-label { font-size:9px; color:var(--mist); text-align:center; padding:2px 0; font-weight:600; }
+.cal-day { height:28px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:10px; cursor:pointer; position:relative; }
+.cal-day.empty { background:none; }
+.cal-day.rest { background:var(--gravel); color:var(--mist); }
+.cal-day.easy { background:#0D2B1C; color:var(--green); }
+.cal-day.threshold { background:#2A1A00; color:var(--yellow); }
+.cal-day.social { background:#0A1830; color:#6BA3E8; }
+.cal-day.fatigue { background:#1E0A00; color:var(--orange-hi); }
+.cal-day.long { background:#200800; color:var(--orange); }
+.cal-day.race { background:var(--orange-lo); color:var(--orange-hi); border:1px solid #5A2010; }
+.cal-day.today { outline:2px solid var(--orange); outline-offset:1px; }
+.cal-day.past { opacity:0.4; }
+
+/* Week detail */
+.week-nav { display:flex; align-items:center; gap:12px; margin-bottom:1.25rem; background:var(--asphalt); border:1px solid var(--gravel); border-radius:var(--r); padding:10px 14px; touch-action:pan-y; }
+.week-nav-btn { background:var(--gravel); border:1px solid #3E4239; color:var(--fog); padding:6px 14px; border-radius:var(--r); cursor:pointer; font-size:16px; flex-shrink:0; }
+.week-nav-btn:hover { background:#3E4239; }
+.week-title { flex:1; text-align:center; font-size:13px; font-weight:600; color:var(--white); }
+.week-subtitle { font-size:11px; color:var(--mist); text-align:center; margin-top:2px; }
+
+/* Ride detail modal */
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:1000; display:flex; align-items:flex-end; justify-content:center; }
+.modal { background:var(--asphalt); border-radius:16px 16px 0 0; width:100%; max-width:720px; max-height:90vh; overflow-y:auto; padding:1.5rem; }
+.modal-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1rem; }
+.modal-title { font-size:16px; font-weight:600; }
+.modal-close { background:var(--gravel); border:none; color:var(--fog); width:32px; height:32px; border-radius:50%; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.modal-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(100px,1fr)); gap:8px; margin-bottom:1rem; }
+.modal-stat { background:var(--gravel); border-radius:var(--r); padding:8px; text-align:center; }
+.modal-stat .val { font-size:18px; font-weight:700; }
+.modal-stat .lbl { font-size:10px; color:var(--mist); margin-top:2px; }
+#route-map { height:220px; border-radius:var(--r); margin-bottom:1rem; background:var(--gravel); }
+.elev-chart { height:80px; background:var(--gravel); border-radius:var(--r); margin-bottom:1rem; position:relative; overflow:hidden; }
+.elev-fill { position:absolute; bottom:0; left:0; right:0; }
+.hr-zones-bar { height:16px; border-radius:var(--r); overflow:hidden; display:flex; margin-bottom:0.5rem; }
+.segment-row { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--gravel); font-size:12px; }
+.segment-row:last-child { border-bottom:none; }
+.seg-name { flex:1; color:var(--white); }
+.seg-time { color:var(--fog); }
+.seg-pr { color:var(--orange); font-weight:700; font-size:11px; }
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="vamiq-logo">VAMIQ</div>
+  <div class="vamiq-tag">AI Cycling Coach</div>
+  <div class="spinner"></div>
+</div>
+
+<!-- AUTH -->
+<div id="auth" style="display:none">
+  <div class="auth-card">
+    <div class="auth-logo">VAMIQ</div>
+    <div class="auth-tag">AI-powered cycling coach for UCI Gran Fondo qualifiers</div>
+    <div style="font-size:11px;color:var(--mist);margin-bottom:1rem;text-align:center">
+      By continuing you agree to our <a href="/privacy.html" target="_blank" style="color:var(--orange-hi)">Privacy Policy</a>
+    </div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchTab('login')">Sign in</button>
+      <button class="auth-tab" onclick="switchTab('signup')">Create account</button>
+    </div>
+    <div id="login-form">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="login-email" placeholder="you@example.com" />
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="login-password" placeholder="Your password" />
+        <div class="field-hint error" id="login-error"></div>
+      </div>
+      <button class="btn-primary" onclick="signIn()">Sign in</button>
+      <div style="text-align:center;margin-top:1rem">
+        <button onclick="forgotPassword()" style="background:none;border:none;color:var(--mist);font-size:12px;cursor:pointer;text-decoration:underline">Forgot password?</button>
+      </div>
+      <div class="field-hint success" id="reset-sent" style="display:none;text-align:center;margin-top:0.5rem">✓ Password reset email sent — check your inbox</div>
+    </div>
+    <div id="signup-form" style="display:none">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="signup-email" placeholder="you@example.com" />
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="signup-password" placeholder="Create a password" oninput="checkPassword(this.value)" />
+        <div class="pw-rules" id="pw-rules">
+          <div class="pw-rule fail" id="pw-len">✗ At least 8 characters</div>
+          <div class="pw-rule fail" id="pw-upper">✗ One uppercase letter</div>
+          <div class="pw-rule fail" id="pw-num">✗ One number</div>
+          <div class="pw-rule fail" id="pw-sym">✗ One symbol (!@#$%^&*)</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Confirm password</label>
+        <input type="password" id="signup-confirm" placeholder="Repeat password" />
+        <div class="field-hint error" id="signup-error"></div>
+      </div>
+      <button class="btn-primary" id="signup-btn" onclick="signUp()" disabled>Create account</button>
+    </div>
+
+    <!-- Reset password form (hidden by default) -->
+    <div id="reset-form" style="display:none">
+      <p style="color:var(--fog);font-size:13px;margin-bottom:1.25rem;line-height:1.5">Enter your new password below.</p>
+      <div class="field">
+        <label>New password</label>
+        <input type="password" id="reset-password" placeholder="New password" oninput="checkResetPassword(this.value)" />
+        <div class="pw-rules" id="reset-pw-rules">
+          <div class="pw-rule fail" id="rp-len">✗ At least 8 characters</div>
+          <div class="pw-rule fail" id="rp-upper">✗ One uppercase letter</div>
+          <div class="pw-rule fail" id="rp-num">✗ One number</div>
+          <div class="pw-rule fail" id="rp-sym">✗ One symbol (!@#$%^&*)</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Confirm new password</label>
+        <input type="password" id="reset-confirm" placeholder="Confirm new password" />
+        <div class="field-hint error" id="reset-error"></div>
+      </div>
+      <button class="btn-primary" id="reset-btn" onclick="updatePassword()" disabled>Update password</button>
+    </div>
+  </div>
+</div>
+
+<!-- ONBOARDING -->
+<div id="onboarding" style="display:none">
+  <div class="onboard-card">
+    <div class="onboard-logo">VAMIQ</div>
+    <div class="onboard-step" id="onboard-step-label">Step 1 of 4 — About you</div>
+    <div class="step-dots" id="step-dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+
+    <!-- Step 1: About you -->
+    <div id="step-1">
+      <div class="onboard-title">Tell us about yourself</div>
+      <div class="onboard-desc">We'll use this to personalise your training plan and coaching advice.</div>
+      <div class="field"><label>First name</label><input type="text" id="ob-name" placeholder="e.g. Tim" /></div>
+      <div class="form-row">
+        <div class="field"><label>Age</label><input type="number" id="ob-age" placeholder="e.g. 57" min="18" max="80" /></div>
+        <div class="field"><label>Weight (kg)</label><input type="number" id="ob-weight" placeholder="e.g. 84" min="40" max="150" /></div>
+      </div>
+      <div class="field">
+        <label>Experience level</label>
+        <select id="ob-experience">
+          <option value="">Select...</option>
+          <option value="beginner">Beginner — ride occasionally</option>
+          <option value="intermediate">Intermediate — ride regularly</option>
+          <option value="advanced">Advanced — race or train seriously</option>
+          <option value="elite">Elite — competitive racer</option>
+        </select>
+      </div>
+      <div class="btn-row">
+        <button class="btn-next" onclick="nextStep(2)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Your goal -->
+    <div id="step-2" style="display:none">
+      <div class="onboard-title">What's your goal?</div>
+      <div class="onboard-desc">Describe your cycling goal in your own words — be as specific as you like. The more detail you give, the better your coach can help.</div>
+      <div class="field">
+        <label>Your goal</label>
+        <textarea id="ob-goal-text" rows="4" placeholder="e.g. I want to qualify for the UCI Gran Fondo World Championships in France in August 2027. My first step is to finish in the top 25% at Amy's Gran Fondo in Lorne on 13 September 2026..." style="width:100%;background:var(--gravel);border:1px solid #3E4239;border-radius:var(--r);padding:10px 12px;color:var(--white);font-size:14px;outline:none;resize:vertical;font-family:var(--font-body);line-height:1.5"></textarea>
+        <div class="field-hint">Tell your coach your target event, date, and what success looks like to you.</div>
+      </div>
+      <div class="field">
+        <label>Target event name <span style="font-weight:400;text-transform:none;font-size:11px">(optional)</span></label>
+        <input type="text" id="ob-event" placeholder="e.g. Amy's Gran Fondo, Lorne" />
+      </div>
+      <div class="field">
+        <label>Event date <span style="font-weight:400;text-transform:none;font-size:11px">(optional)</span></label>
+        <input type="date" id="ob-event-date" />
+      </div>
+      <div class="btn-row">
+        <button class="btn-back" onclick="nextStep(1)">← Back</button>
+        <button class="btn-next" onclick="nextStep(3)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Training availability -->
+    <div id="step-3" style="display:none">
+      <div class="onboard-title">Your training schedule</div>
+      <div class="onboard-desc">How much time can you dedicate to training each week?</div>
+      <div class="field">
+        <label>Hours per week</label>
+        <select id="ob-hours">
+          <option value="">Select...</option>
+          <option value="4">4–6 hours</option>
+          <option value="7">7–9 hours</option>
+          <option value="10">10–12 hours</option>
+          <option value="13">13–15 hours</option>
+          <option value="16">16+ hours</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Do you have a power meter?</label>
+        <select id="ob-power">
+          <option value="no">No — heart rate only</option>
+          <option value="yes">Yes — power meter</option>
+          <option value="smart">Smart trainer with power</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Estimated FTP (watts) — leave blank if unsure</label>
+        <input type="number" id="ob-ftp" placeholder="e.g. 215" min="100" max="500" />
+      </div>
+      <div class="btn-row">
+        <button class="btn-back" onclick="nextStep(2)">← Back</button>
+        <button class="btn-next" onclick="nextStep(4)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Connect Strava -->
+    <div id="step-4" style="display:none">
+      <div class="onboard-title">Connect Strava</div>
+      <div class="onboard-desc">VAMIQ analyses your rides to personalise your training plan. Click Connect Strava and authorise — you'll be brought straight back here automatically.</div>
+      <div class="box box-yellow" style="font-size:12px;line-height:1.6;margin-bottom:0.75rem">
+        <strong>What we'll access:</strong> your ride activities (distance, time, elevation, heart rate, power, cadence, GPS route, segments). We use this only to show you your own training data and to power your AI coach's advice to you — it's never shown to other users or used to train any AI model.
+        You can disconnect and delete this data at any time from Profile, or by emailing <a href="mailto:support@vamiq.au" style="color:var(--orange-hi)">support@vamiq.au</a>. Full details in our <a href="/privacy.html" target="_blank" style="color:var(--orange-hi)">Privacy Policy</a>.
+      </div>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--fog);margin-bottom:0.85rem;cursor:pointer">
+        <input type="checkbox" id="ob-strava-consent" onchange="const b=document.getElementById('ob-strava-connect-btn'); b.disabled=!this.checked; b.style.opacity=this.checked?'1':'0.5'; b.style.cursor=this.checked?'pointer':'not-allowed';" style="margin-top:2px">
+        <span>I understand what data VAMIQ will access from my Strava account and how it's used, as described above.</span>
+      </label>
+      <button class="strava-connect" id="ob-strava-connect-btn" onclick="connectStrava()" disabled style="opacity:0.5;cursor:not-allowed">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+        Connect Strava
+      </button>
+      <button class="skip-btn" onclick="skipStrava()" style="margin-top:0.5rem">Skip for now — I'll connect later</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <header class="app-header">
+    <div>
+      <h1>VAMIQ</h1>
+      <div class="sub" id="app-sub">AI cycling coach</div>
+    </div>
+    <div class="header-right">
+      <div class="strava-pill" id="strava-pill">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="white"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+        Live
+      </div>
+      <button class="sync-btn" id="sync-btn" onclick="syncStrava()">↻ Sync</button>
+      <button class="user-btn" id="user-btn" onclick="showUserMenu()">👤</button>
+    </div>
+  </header>
+
+  <nav class="app-nav">
+    <button class="nav-tab active" onclick="show('dashboard',this)">Dashboard</button>
+    <button class="nav-tab" onclick="show('calendar',this)">Calendar</button>
+    <button class="nav-tab" onclick="show('rides',this)">Rides</button>
+    <button class="nav-tab" onclick="show('zones',this)">Zones</button>
+    <button class="nav-tab" onclick="show('goals',this)">My goal</button>
+    <button class="nav-tab" onclick="show('profile',this)">Profile</button>
+    <button class="nav-tab" onclick="show('coach',this)">Ask coach</button>
+    <button class="nav-tab" onclick="show('help',this)">Help</button>
+  </nav>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard" class="panel active">
+    <div class="box box-green" id="d-summary">
+      <strong>Welcome to VAMIQ.</strong> Sync your Strava to load your latest ride data and get personalised coaching.
+    </div>
+    <p class="slabel">Your numbers</p>
+    <div class="cards">
+      <div class="card"><div class="lbl">Est. FTP</div><div class="val c-orange" id="d-ftp">— W</div><div class="sub" id="d-ftp-sub">Sync Strava to calculate</div></div>
+      <div class="card"><div class="lbl">W/kg</div><div class="val" id="d-wkg">—</div><div class="sub">Target: 3.0+</div></div>
+      <div class="card"><div class="lbl">Best long ride</div><div class="val c-green" id="d-best">—</div><div class="sub" id="d-best-sub">Sync to load</div></div>
+      <div class="card"><div class="lbl">Last ride</div><div class="val" id="d-last">—</div><div class="sub" id="d-last-sub">Sync to load</div></div>
+      <div class="card"><div class="lbl">Days to goal</div><div class="val c-yellow" id="d-days">—</div><div class="sub" id="d-days-sub">Set your goal</div></div>
+      <div class="card"><div class="lbl">Target time</div><div class="val c-orange" id="d-target">—</div><div class="sub" id="d-target-sub">Based on your goal</div></div>
+    </div>
+    <p class="slabel">Goal readiness</p>
+    <div class="prog-wrap"><div class="prog-label"><span>Aerobic base</span><span id="p1-pct">—</span></div><div class="prog-bg"><div class="prog-fill" id="p1" style="width:0%;background:var(--green)"></div></div></div>
+    <div class="prog-wrap"><div class="prog-label"><span>Climbing capacity</span><span id="p2-pct">—</span></div><div class="prog-bg"><div class="prog-fill" id="p2" style="width:0%;background:var(--yellow)"></div></div></div>
+    <div class="prog-wrap"><div class="prog-label"><span>Endurance (time in saddle)</span><span id="p3-pct">—</span></div><div class="prog-bg"><div class="prog-fill" id="p3" style="width:0%;background:var(--yellow)"></div></div></div>
+    <div class="prog-wrap"><div class="prog-label"><span>Race pace readiness</span><span id="p4-pct">—</span></div><div class="prog-bg"><div class="prog-fill" id="p4" style="width:0%;background:var(--orange)"></div></div></div>
+  </div>
+
+  <!-- CALENDAR -->
+  <div id="calendar" class="panel">
+    <div id="cal-month-view">
+      <div class="cal-header">
+        <button class="cal-nav-btn" onclick="calPrev()">‹</button>
+        <div class="cal-title" id="cal-range-title">Training Calendar</div>
+        <button class="cal-nav-btn" onclick="calNext()">›</button>
+      </div>
+      <div class="cal-months" id="cal-months-grid"></div>
+    </div>
+    <div id="cal-week-view" style="display:none">
+      <div class="week-nav" id="week-swipe">
+        <button class="week-nav-btn" onclick="weekNav(-1)">‹</button>
+        <div>
+          <div class="week-title" id="week-title">Your training week</div>
+          <div class="week-subtitle" id="week-date"></div>
+        </div>
+        <button class="week-nav-btn" onclick="weekNav(1)">›</button>
+      </div>
+      <div id="week-detail-content"></div>
+      <button class="skip-btn" style="margin-top:1rem" onclick="showCalMonth()">← Back to calendar</button>
+    </div>
+  </div>
+
+  <!-- RIDES -->
+  <div id="rides" class="panel">
+    <p class="slabel">Recent Strava rides</p>
+    <div id="rides-list"><p style="color:var(--mist);font-size:13px">Click ↻ Sync to load your rides.</p></div>
+    <div id="rides-note" class="box box-orange" style="display:none"></div>
+  </div>
+
+  <!-- WEEK -->
+  <div id="week" class="panel">
+    <p class="slabel">Your training week</p>
+    <div id="week-content">
+      <div class="box box-yellow">Your personalised weekly plan will appear here once you complete onboarding and set your goal.</div>
+    </div>
+  </div>
+
+  <!-- ZONES -->
+  <div id="zones" class="panel">
+    <div class="box box-yellow" id="zones-note">Sync your Strava and complete onboarding to see your personalised training zones.</div>
+    <p class="slabel">Training zones</p>
+    <div id="zones-content">
+      <!-- Header row -->
+      <div style="display:flex;gap:8px;padding:6px 0 8px;border-bottom:1px solid var(--gravel);margin-bottom:2px">
+        <div style="width:11px;flex-shrink:0"></div>
+        <div style="width:120px;flex-shrink:0;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--mist)">Zone</div>
+        <div style="width:110px;flex-shrink:0;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--mist)">Power</div>
+        <div style="width:110px;flex-shrink:0;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--mist)">Heart rate</div>
+        <div style="flex:1;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--mist);text-align:right">When to use</div>
+      </div>
+      <div class="zrow"><div class="zdot" style="background:#4CAF7D"></div><div class="zname">Z1 — Recovery</div><div class="zrange" id="z1-range">—</div><div class="zhr" id="z1-hr">—</div><div class="znote">Easy spin / warm-up</div></div>
+      <div class="zrow"><div class="zdot" style="background:#2D9B6A"></div><div class="zname">Z2 — Endurance</div><div class="zrange" id="z2-range">—</div><div class="zhr" id="z2-hr">—</div><div class="znote">Long rides / base</div></div>
+      <div class="zrow"><div class="zdot" style="background:#E8C30A"></div><div class="zname">Z3 — Tempo</div><div class="zrange" id="z3-range">—</div><div class="zhr" id="z3-hr">—</div><div class="znote">Sustained hard effort</div></div>
+      <div class="zrow"><div class="zdot" style="background:#E8A20A"></div><div class="zname">Z4 — Threshold</div><div class="zrange" id="z4-range">—</div><div class="zhr" id="z4-hr">—</div><div class="znote">Intervals / FTP work</div></div>
+      <div class="zrow"><div class="zdot" style="background:#E86040"></div><div class="zname">Z5 — VO2max</div><div class="zrange" id="z5-range">—</div><div class="zhr" id="z5-hr">—</div><div class="znote">Short hard efforts</div></div>
+      <div class="zrow"><div class="zdot" style="background:#E84040"></div><div class="zname">Z6 — Anaerobic</div><div class="zrange" id="z6-range">—</div><div class="zhr" id="z6-hr">—</div><div class="znote">Sprints / attacks</div></div>
+    </div>
+  </div>
+
+  <!-- GOALS -->
+  <div id="goals" class="panel">
+    <p class="slabel">My training goal</p>
+    <div id="goal-display">
+      <div class="box box-orange">No goal set yet. Complete onboarding to set your training goal.</div>
+    </div>
+    <button class="btn-primary" style="margin-top:1rem" onclick="editGoal()">Update my goal</button>
+  </div>
+
+  <!-- PROFILE -->
+  <div id="profile" class="panel">
+    <p class="slabel">My profile</p>
+    <div class="box box-orange" id="profile-display">Loading...</div>
+
+    <p class="slabel" style="margin-top:1.25rem">Edit profile</p>
+    <div class="field"><label>First name</label><input type="text" id="p-name" /></div>
+    <div class="form-row">
+      <div class="field"><label>Age</label><input type="number" id="p-age" min="18" max="80" /></div>
+      <div class="field"><label>Weight (kg)</label><input type="number" id="p-weight" min="40" max="150" /></div>
+    </div>
+    <div class="field"><label>FTP (watts)</label><input type="number" id="p-ftp" min="100" max="500" /><div class="field-hint">Leave blank to estimate from Strava HR data</div></div>
+    <div class="field"><label>Hours per week</label>
+      <select id="p-hours">
+        <option value="4">4–6 hours</option>
+        <option value="7">7–9 hours</option>
+        <option value="10">10–12 hours</option>
+        <option value="13">13–15 hours</option>
+        <option value="16">16+ hours</option>
+      </select>
+    </div>
+    <div class="field"><label>Power meter</label>
+      <select id="p-power">
+        <option value="no">No — heart rate only</option>
+        <option value="yes">Yes — power meter</option>
+        <option value="smart">Smart trainer with power</option>
+      </select>
+    </div>
+    <div class="field"><label>Experience level</label>
+      <select id="p-experience">
+        <option value="beginner">Beginner</option>
+        <option value="intermediate">Intermediate</option>
+        <option value="advanced">Advanced</option>
+        <option value="elite">Elite</option>
+      </select>
+    </div>
+
+    <p class="slabel" style="margin-top:1.25rem">My goal</p>
+    <div class="field">
+      <label>Describe your goal</label>
+      <textarea id="p-goal-text" rows="4" placeholder="e.g. I want to qualify for UCI Gran Fondo Worlds..." style="width:100%;background:var(--gravel);border:1px solid #3E4239;border-radius:var(--r);padding:10px 12px;color:var(--white);font-size:14px;outline:none;resize:vertical;font-family:var(--font-body);line-height:1.5"></textarea>
+    </div>
+    <div class="field"><label>Target event</label><input type="text" id="p-event" placeholder="e.g. Amy's Gran Fondo, Lorne" /></div>
+    <div class="field"><label>Event date</label><input type="date" id="p-event-date" /></div>
+
+    <button class="btn-primary" onclick="saveProfileEdits()">Save changes</button>
+    <div class="field-hint success" id="profile-saved" style="margin-top:0.75rem;display:none;text-align:center">✓ Profile saved!</div>
+
+    <div style="margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid var(--gravel)">
+      <p class="slabel">Strava connection</p>
+      <div id="strava-profile-status" class="box box-green" style="display:none">
+        <strong>✓ Strava connected</strong><br>
+        <span style="font-size:12px">Your rides sync automatically. <button onclick="reconnectStrava()" style="background:none;border:none;color:#85DBA8;font-size:12px;cursor:pointer;text-decoration:underline;padding:0">Reconnect</button> if sync stops working.</span>
+      </div>
+      <div id="strava-profile-disconnected" class="box box-orange" style="display:none">
+        <strong>⚠️ Strava not connected</strong><br>
+        <span style="font-size:12px">Connect Strava to sync your rides and get personalised coaching. We access ride distance, time, elevation, HR, power, cadence, GPS route and segments — shown only to you, never to other users or used to train AI models. See our <a href="/privacy.html" target="_blank" style="color:var(--orange-hi)">Privacy Policy</a>.</span>
+      </div>
+      <button id="strava-connect-btn" onclick="reconnectStrava()" class="strava-connect" style="margin-top:0.75rem;display:none">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+        Connect Strava
+      </button>
+      <button id="strava-disconnect-btn" onclick="disconnectStrava()" class="skip-btn" style="margin-top:0.75rem;display:none;color:#FF8585;border-color:#5A1010">
+        Disconnect Strava &amp; delete my Strava data
+      </button>
+      <div id="strava-disconnect-status" style="display:none;margin-top:0.5rem"></div>
+    </div>
+
+    <div style="margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid var(--gravel)">
+      <p class="slabel">Account</p>
+      <div style="font-size:13px;color:var(--mist);margin-bottom:0.75rem" id="profile-email"></div>
+      <button class="skip-btn" onclick="if(confirm('Sign out of VAMIQ?')) sb.auth.signOut()">Sign out</button>
+      <p style="font-size:11px;color:var(--mist);margin-top:0.75rem">
+        Want your account and all data deleted entirely? Email <a href="mailto:support@vamiq.au" style="color:var(--orange-hi)">support@vamiq.au</a> — we'll confirm once it's done, within 30 days.
+      </p>
+    </div>
+  </div>
+
+  <!-- COACH -->
+  <div id="coach" class="panel">
+    <div class="chat-msgs" id="chat-msgs">
+      <div class="msg coach">
+        <div class="mav">🚴</div>
+        <div class="mbub" id="coach-welcome">G'day! I'm your VAMIQ coach. Complete your profile and connect Strava so I can give you personalised advice. What do you want to work on?</div>
+      </div>
+    </div>
+    <div class="chat-foot">
+      <div class="qps" id="quick-prompts">
+        <button class="qp" onclick="qa('What should my training look like this week?')">This week's plan</button>
+        <button class="qp" onclick="qa('How do I pace my target event?')">Event pacing</button>
+        <button class="qp" onclick="qa('What should I eat on long rides?')">Nutrition</button>
+        <button class="qp" onclick="qa('How do I know if I am overtraining?')">Recovery</button>
+        <button class="qp" onclick="qa('Should I get a power meter?')">Power meter?</button>
+      </div>
+      <div class="irow">
+        <textarea class="cinput" id="cinput" placeholder="Ask your coach anything..." rows="1"></textarea>
+        <button class="sbtn" id="sbtn" onclick="send()">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HELP -->
+  <div id="help" class="panel">
+    <p class="slabel">About VAMIQ</p>
+    <div class="box box-green">
+      VAMIQ is an AI-powered training coach for cyclists. It connects to your Strava account, builds a personalised weekly training plan around your goal, and lets you chat with an AI coach that understands your recent riding.
+    </div>
+
+    <p class="slabel" style="margin-top:1.25rem">Your data & privacy</p>
+    <div class="box box-orange" style="line-height:1.7">
+      <strong>What we access from Strava:</strong> ride distance, time, elevation, heart rate, power, cadence, GPS route and segments — only for rides you've done, and only after you explicitly connect your account.<br><br>
+      <strong>Who sees it:</strong> only you. Your ride data is never shown to other VAMIQ users, sold, or used to train any AI model.<br><br>
+      <strong>How it's used:</strong> to show you your own dashboard, training zones and calendar, and to give your AI coach context so it can answer your questions about your own training.<br><br>
+      <strong>Disconnecting:</strong> you can disconnect Strava and permanently delete your Strava data from VAMIQ at any time in <strong>Profile → Strava connection</strong>.<br><br>
+      Full details are in our <a href="/privacy.html" target="_blank" style="color:var(--orange-hi)">Privacy Policy</a>.
+    </div>
+
+    <p class="slabel" style="margin-top:1.25rem">Frequently asked questions</p>
+    <div class="tl">
+      <div class="tl-row"><div class="tl-text"><strong>Does the AI coach train on my Strava data?</strong><br>No. Your ride data is used only to answer your own questions in your own coaching chat — it's never used to train, fine-tune, or improve any AI model.</div></div>
+      <div class="tl-row"><div class="tl-text"><strong>Can other users see my rides or my goal?</strong><br>No. Every athlete's data is private to their own account. Nothing is shared, aggregated, or shown to anyone else.</div></div>
+      <div class="tl-row"><div class="tl-text"><strong>How do I disconnect Strava?</strong><br>Go to Profile → Strava connection → "Disconnect Strava & delete my Strava data." This removes our stored access to your account and deletes the tokens immediately — you can reconnect any time.</div></div>
+      <div class="tl-row"><div class="tl-text"><strong>How do I delete my whole VAMIQ account?</strong><br>Email <a href="mailto:support@vamiq.au" style="color:var(--orange-hi)">support@vamiq.au</a> and we'll delete your account and all associated data within 30 days, with written confirmation once it's done.</div></div>
+      <div class="tl-row"><div class="tl-text"><strong>Why do I need to reconnect Strava sometimes?</strong><br>Strava access tokens occasionally expire or get revoked (e.g. if you change your Strava password). If sync stops working, just hit "Reconnect" in Profile.</div></div>
+      <div class="tl-row"><div class="tl-text"><strong>Does VAMIQ cost anything?</strong><br>VAMIQ is currently free while in beta.</div></div>
+      <div class="tl-row"><div class="tl-text"><strong>Is my Strava data backed up or stored long-term?</strong><br>No — we don't keep a long-term copy of your ride history. We fetch it fresh from Strava each time you sync.</div></div>
+    </div>
+
+    <p class="slabel" style="margin-top:1.25rem">Still need help?</p>
+    <div class="box box-green">
+      Email us any time at <a href="mailto:support@vamiq.au" style="color:#85DBA8;font-weight:600">support@vamiq.au</a> — we read every message and aim to reply within a couple of days.
+    </div>
+  </div>
+</div>
+
+<script>
+// Hard timeout — if still loading after 4 seconds, force auth screen
+setTimeout(() => {
+  const loading = document.getElementById('loading');
+  const auth = document.getElementById('auth');
+  if (loading && loading.style.display !== 'none') {
+    loading.style.display = 'none';
+    auth.style.display = 'flex';
+  }
+}, 4000);
+
+// ── SUPABASE ──
+const SUPABASE_URL = 'https://cjonjfzpqtjpvrabjkla.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ca8dMZxfj8SXA6KX9z60xA_GBFCc_oN';
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── STATE ──
+let currentUser = null;
+let userProfile = null;
+let chatHistory = [];
+let liveRides = '';
+let currentStep = 1;
+let selectedGoal = '';
+let scheduleOverrides = {}; // keyed by 'YYYY-MM-DD' -> {session_type, title, description}
+
+// ── INIT ──
+window.addEventListener('load', async () => {
+  // Timeout after 5 seconds to prevent infinite spinner
+  const timeout = setTimeout(() => {
+    showScreen('auth');
+  }, 5000);
+
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    clearTimeout(timeout);
+    if (session) {
+      currentUser = session.user;
+      await loadProfile();
+    } else {
+      showScreen('auth');
+    }
+  } catch(e) {
+    clearTimeout(timeout);
+    showScreen('auth');
+  }
+});
+
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'SIGNED_IN' && session) {
+    currentUser = session.user;
+    await loadProfile();
+  } else if (event === 'SIGNED_OUT') {
+    currentUser = null;
+    userProfile = null;
+    showScreen('auth');
+  }
+});
+
+function showScreen(screen) {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('auth').style.display = 'none';
+  document.getElementById('onboarding').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+  if (screen === 'auth') document.getElementById('auth').style.display = 'flex';
+  else if (screen === 'onboarding') document.getElementById('onboarding').style.display = 'flex';
+  else if (screen === 'app') {
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('app').style.flexDirection = 'column';
+    initApp();
+  }
+}
+
+// ── AUTH ──
+function switchTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+  if (event?.target) event.target.classList.add('active');
+  document.getElementById('login-form').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('signup-form').style.display = tab === 'signup' ? 'block' : 'none';
+  document.getElementById('reset-form').style.display = tab === 'reset' ? 'block' : 'none';
+}
+
+function switchTabByName(tab) {
+  document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('login-form').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('signup-form').style.display = tab === 'signup' ? 'block' : 'none';
+  document.getElementById('reset-form').style.display = tab === 'reset' ? 'block' : 'none';
+}
+
+function checkPassword(pw) {
+  const rules = {
+    'pw-len': pw.length >= 8,
+    'pw-upper': /[A-Z]/.test(pw),
+    'pw-num': /[0-9]/.test(pw),
+    'pw-sym': /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw)
+  };
+  let allOk = true;
+  for (const [id, ok] of Object.entries(rules)) {
+    const el = document.getElementById(id);
+    el.className = 'pw-rule ' + (ok ? 'ok' : 'fail');
+    el.textContent = (ok ? '✓' : '✗') + ' ' + el.textContent.slice(2);
+    if (!ok) allOk = false;
+  }
+  document.getElementById('signup-btn').disabled = !allOk;
+  return allOk;
+}
+
+async function forgotPassword() {
+  const email = document.getElementById('login-email').value.trim();
+  if (!email) {
+    document.getElementById('login-error').textContent = 'Please enter your email address first';
+    return;
+  }
+  document.getElementById('login-error').textContent = '';
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + '/?reset=true'
+  });
+  if (error) {
+    document.getElementById('login-error').textContent = error.message;
+  } else {
+    document.getElementById('reset-sent').style.display = 'block';
+    setTimeout(() => document.getElementById('reset-sent').style.display = 'none', 8000);
+  }
+}
+
+async function signIn() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  document.getElementById('login-error').textContent = '';
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) document.getElementById('login-error').textContent = error.message;
+}
+
+function checkResetPassword(pw) {
+  const rules = {
+    'rp-len': pw.length >= 8,
+    'rp-upper': /[A-Z]/.test(pw),
+    'rp-num': /[0-9]/.test(pw),
+    'rp-sym': /[!@#$%^&*()_+\-=\[\]{};':"\|,.<>\/?]/.test(pw)
+  };
+  let allOk = true;
+  for (const [id, ok] of Object.entries(rules)) {
+    const el = document.getElementById(id);
+    if (el) { el.className = 'pw-rule ' + (ok ? 'ok' : 'fail'); el.textContent = (ok?'✓':'✗') + ' ' + el.textContent.slice(2); }
+    if (!ok) allOk = false;
+  }
+  document.getElementById('reset-btn').disabled = !allOk;
+}
+
+async function updatePassword() {
+  const password = document.getElementById('reset-password').value;
+  const confirm = document.getElementById('reset-confirm').value;
+  document.getElementById('reset-error').textContent = '';
+  if (password !== confirm) { document.getElementById('reset-error').textContent = 'Passwords do not match'; return; }
+  const { error } = await sb.auth.updateUser({ password });
+  if (error) {
+    document.getElementById('reset-error').textContent = error.message;
+  } else {
+    alert('Password updated! You are now signed in.');
+    await loadProfile();
+  }
+}
+
+async function signUp() {
+  const email = document.getElementById('signup-email').value.trim();
+  const password = document.getElementById('signup-password').value;
+  const confirm = document.getElementById('signup-confirm').value;
+  document.getElementById('signup-error').textContent = '';
+  if (password !== confirm) { document.getElementById('signup-error').textContent = 'Passwords do not match'; return; }
+  if (!checkPassword(password)) return;
+  const { error } = await sb.auth.signUp({ email, password });
+  if (error) document.getElementById('signup-error').textContent = error.message;
+  else document.getElementById('signup-error').textContent = '';
+}
+
+// ── PROFILE ──
+async function loadProfile() {
+  try {
+    const { data, error } = await sb.from('profiles').select('*').eq('id', currentUser.id).single();
+    if (data && !error) {
+      userProfile = data;
+      showScreen('app');
+    } else {
+      showScreen('onboarding');
+    }
+  } catch (e) {
+    showScreen('onboarding');
+  }
+}
+
+async function saveProfile(profile) {
+  const { error } = await sb.from('profiles').upsert({ id: currentUser.id, ...profile, updated_at: new Date().toISOString() });
+  if (!error) userProfile = { id: currentUser.id, ...profile };
+}
+
+// ── ONBOARDING ──
+function nextStep(step) {
+  document.getElementById('step-' + currentStep).style.display = 'none';
+  currentStep = step;
+  document.getElementById('step-' + step).style.display = 'block';
+
+  // Update dots
+  const dots = document.querySelectorAll('.dot');
+  dots.forEach((d, i) => {
+    d.className = 'dot' + (i < step - 1 ? ' done' : i === step - 1 ? ' active' : '');
+  });
+
+  const labels = ['About you', 'Your goal', 'Training schedule', 'Connect Strava'];
+  document.getElementById('onboard-step-label').textContent = `Step ${step} of 4 — ${labels[step-1]}`;
+}
+
+function selectGoal(goal) {
+  selectedGoal = goal;
+  document.querySelectorAll('.goal-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('goal-' + goal).classList.add('selected');
+  const showEvent = goal === 'uci_qualifier' || goal === 'gran_fondo';
+  document.getElementById('event-field').style.display = showEvent ? 'block' : 'none';
+  document.getElementById('event-date-field').style.display = showEvent ? 'block' : 'none';
+}
+
+async function startStravaAuth() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { alert('Please sign in again before connecting Strava.'); return; }
+  let state;
+  try {
+    const r = await fetch('/api/strava-connect', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + session.access_token }
+    });
+    const data = await r.json();
+    if (!data.state) throw new Error(data.error || 'Could not start Strava connection');
+    state = data.state;
+  } catch (e) {
+    alert('Could not start Strava connection: ' + e.message + '. Please try again.');
+    return;
+  }
+  const clientId = '263268';
+  const redirectUri = encodeURIComponent('https://vamiq.au/api/strava-callback');
+  const url = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=activity:read_all&state=${encodeURIComponent(state)}`;
+  window.location.href = url;
+}
+
+async function connectStrava() {
+  // Called from onboarding step 4 — save what we've collected so far first,
+  // so the profile row exists when Strava redirects back to the callback.
+  const goalText = document.getElementById('ob-goal-text')?.value.trim() || '';
+  const gtLower = goalText.toLowerCase();
+  let detectedGoalType = 'fitness';
+  if (gtLower.includes('uci') || gtLower.includes('world') || gtLower.includes('qualify') || gtLower.includes('qualifier')) detectedGoalType = 'uci_qualifier';
+  else if (gtLower.includes('gran fondo') || gtLower.includes('granfondo') || gtLower.includes('fondo')) detectedGoalType = 'gran_fondo';
+  else if (gtLower.includes('century') || gtLower.includes('100km') || gtLower.includes('100 km')) detectedGoalType = 'century';
+
+  await saveProfile({
+    name: document.getElementById('ob-name').value.trim(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    age: parseInt(document.getElementById('ob-age').value) || null,
+    weight: parseFloat(document.getElementById('ob-weight').value) || null,
+    experience: document.getElementById('ob-experience').value,
+    goal_type: detectedGoalType,
+    goal_text: goalText,
+    goal_event: document.getElementById('ob-event')?.value || '',
+    goal_date: document.getElementById('ob-event-date')?.value || null,
+    hours_per_week: parseInt(document.getElementById('ob-hours').value) || null,
+    has_power_meter: document.getElementById('ob-power').value,
+    ftp: parseInt(document.getElementById('ob-ftp').value) || null,
+  });
+
+  await startStravaAuth();
+}
+
+async function skipStrava() {
+  await completeOnboarding(null);
+}
+
+async function completeOnboarding(stravaData) {
+  const goalText = document.getElementById('ob-goal-text')?.value.trim() || '';
+  // Auto-detect goal type from free text
+  const gtLower = goalText.toLowerCase();
+  let detectedGoalType = 'fitness';
+  if (gtLower.includes('uci') || gtLower.includes('world') || gtLower.includes('qualify') || gtLower.includes('qualifier')) detectedGoalType = 'uci_qualifier';
+  else if (gtLower.includes('gran fondo') || gtLower.includes('granfondo') || gtLower.includes('fondo')) detectedGoalType = 'gran_fondo';
+  else if (gtLower.includes('century') || gtLower.includes('100km') || gtLower.includes('100 km')) detectedGoalType = 'century';
+
+  const profile = {
+    name: document.getElementById('ob-name').value.trim(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    age: parseInt(document.getElementById('ob-age').value) || null,
+    weight: parseFloat(document.getElementById('ob-weight').value) || null,
+    experience: document.getElementById('ob-experience').value,
+    goal_type: detectedGoalType,
+    goal_text: goalText,
+    goal_event: document.getElementById('ob-event')?.value || '',
+    goal_date: document.getElementById('ob-event-date')?.value || null,
+    hours_per_week: parseInt(document.getElementById('ob-hours').value) || null,
+    has_power_meter: document.getElementById('ob-power').value,
+    ftp: parseInt(document.getElementById('ob-ftp').value) || null,
+    strava_access_token: stravaData?.access_token || null,
+    strava_refresh_token: stravaData?.refresh_token || null,
+  };
+  await saveProfile(profile);
+  showScreen('app');
+}
+
+// ── APP ──
+function initApp() {
+  handleStravaRedirectParams();
+  updateCountdowns();
+  updateGoalDisplay();
+  updateWeeklyPlan();
+  updateCoachWelcome();
+  loadScheduleOverrides();
+  if (userProfile?.strava_access_token) syncStrava();
+  if (userProfile?.name) {
+    document.getElementById('app-sub').textContent = `Welcome back, ${userProfile.name}`;
+  }
+}
+
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+async function loadScheduleOverrides() {
+  try {
+    const { data, error } = await sb.from('schedule_overrides').select('date,session_type,title,description').eq('user_id', currentUser.id);
+    if (error || !data) return;
+    scheduleOverrides = {};
+    data.forEach(row => {
+      scheduleOverrides[row.date] = { session_type: row.session_type, title: row.title, description: row.description };
+    });
+    // Refresh calendar views if currently visible so overrides show immediately
+    if (document.getElementById('cal-week-view')?.style.display !== 'none') renderWeekDetail();
+    if (document.getElementById('calendar')?.classList.contains('active')) renderCalendar();
+  } catch (e) {}
+}
+
+async function resetScheduleDay(dateStr) {
+  if (!confirm('Reset this day back to your default training plan?')) return;
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const r = await fetch('/api/schedule-apply', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'reset', date: dateStr })
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Could not reset'); }
+    delete scheduleOverrides[dateStr];
+    renderWeekDetail();
+    renderCalendar();
+  } catch (e) {
+    alert('Could not reset that day: ' + e.message);
+  }
+}
+
+function addScheduleNote(text, tone) {
+  const c = document.getElementById('chat-msgs');
+  const d = document.createElement('div');
+  d.style.cssText = `text-align:center;font-size:11px;color:${tone==='dismiss'?'var(--mist)':'var(--green)'};margin:4px 0;padding:2px 0`;
+  d.textContent = text;
+  c.appendChild(d);
+  c.scrollTop = c.scrollHeight;
+}
+
+async function applyScheduleChange(change, btnEl) {
+  btnEl.disabled = true;
+  btnEl.textContent = 'Applying…';
+
+  // Step 1: the actual save. This is the ONLY thing that determines success/failure.
+  // Broken into small labelled steps so if something fails, the alert tells us
+  // exactly which step and exactly what the browser said — no DevTools needed.
+  let step = 'starting';
+  try {
+    step = 'getting session';
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) throw new Error('No active session — please sign in again');
+
+    step = 'checking session token';
+    if (typeof session.access_token !== 'string' || !session.access_token) {
+      throw new Error('Session token missing or invalid type: ' + typeof session.access_token);
+    }
+
+    step = 'building request';
+    const payload = { action: 'set', date: change.date, session_type: change.type, title: change.title, detail: change.detail };
+    const bodyStr = JSON.stringify(payload);
+
+    step = 'sending request';
+    const r = await fetch('/api/schedule-apply', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
+      body: bodyStr
+    });
+
+    step = 'reading response';
+    if (!r.ok) {
+      let msg = 'Server rejected the request (status ' + r.status + ')';
+      try { const e = await r.json(); msg = e.error || msg; } catch (e2) {}
+      throw new Error(msg);
+    }
+  } catch (e) {
+    console.error('applyScheduleChange failed at step: ' + step, e);
+    btnEl.disabled = false;
+    btnEl.textContent = 'Confirm & apply';
+    alert('Could not apply that change.\n\nStep: ' + step + '\nError type: ' + (e.name || 'Unknown') + '\nMessage: ' + e.message);
+    return;
+  }
+
+  // Step 2: cosmetic follow-up (UI refresh, chat note). The save already
+  // succeeded above, so nothing here should ever be reported to the user as
+  // a failure — at worst we log it and the athlete can refresh the Calendar tab.
+  try {
+    scheduleOverrides[change.date] = { session_type: change.type, title: change.title, description: change.detail };
+    try { renderWeekDetail(); } catch (e) { console.error('renderWeekDetail failed after save', e); }
+    try { renderCalendar(); } catch (e) { console.error('renderCalendar failed after save', e); }
+    const card = btnEl.closest('.schedule-proposal-card');
+    if (card) card.innerHTML = `<div style="color:var(--green);font-size:12px">✓ Confirmed and applied to your calendar.</div>`;
+    const dateLabel = new Date(change.date + 'T00:00:00').toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'short' });
+    addScheduleNote(`✓ You confirmed: ${change.title} — ${dateLabel}`, 'confirm');
+    chatHistory.push({ role:'user', content: `[Schedule change confirmed and applied] ${dateLabel}: "${change.title}" — ${change.detail}` });
+    if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+  } catch (e) {
+    console.error('applyScheduleChange: cosmetic update failed (change WAS saved)', e);
+  }
+}
+
+function dismissScheduleProposal(btnEl) {
+  const card = btnEl.closest('.schedule-proposal-card');
+  if (!card) return;
+  let p = {};
+  try { p = JSON.parse(card.dataset.proposal || '{}'); } catch (e) {}
+  card.innerHTML = `<div style="color:var(--mist);font-size:12px">✕ Dismissed — no changes made.</div>`;
+  if (p.date && p.title) {
+    const dateLabel = new Date(p.date + 'T00:00:00').toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'short' });
+    addScheduleNote(`✕ You dismissed: ${p.title} — ${dateLabel}`, 'dismiss');
+    chatHistory.push({ role:'user', content: `[Schedule change dismissed — not applied] ${dateLabel}: "${p.title}". Please don't assume this change happened.` });
+    if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+  }
+}
+
+async function applyAllScheduleChanges(groupId, btnEl) {
+  const group = document.getElementById(groupId);
+  if (!group) return;
+  btnEl.disabled = true;
+  btnEl.textContent = 'Applying all…';
+  const cards = Array.from(group.querySelectorAll('.schedule-proposal-card'));
+  let failCount = 0;
+  for (const card of cards) {
+    const confirmBtn = card.querySelector('.sp-confirm-btn');
+    if (!confirmBtn || confirmBtn.disabled) continue;
+    try {
+      const p = JSON.parse(card.dataset.proposal);
+      await applyScheduleChange(p, confirmBtn);
+    } catch (e) {
+      console.error('applyAllScheduleChanges: one change failed', e);
+      failCount++;
+    }
+  }
+  btnEl.textContent = failCount ? `Applied with ${failCount} error(s)` : '✓ All applied';
+  const dismissAllBtn = group.querySelector('button[onclick^="dismissAllScheduleProposals"]');
+  if (dismissAllBtn) dismissAllBtn.remove();
+}
+
+function dismissAllScheduleProposals(groupId) {
+  const group = document.getElementById(groupId);
+  if (!group) return;
+  const cards = Array.from(group.querySelectorAll('.schedule-proposal-card'));
+  const titles = [];
+  cards.forEach(card => {
+    let p = {};
+    try { p = JSON.parse(card.dataset.proposal || '{}'); } catch (e) {}
+    if (p.title) titles.push(p.title);
+    card.innerHTML = `<div style="color:var(--mist);font-size:12px">✕ Dismissed — no changes made.</div>`;
+  });
+  const header = group.querySelector('div');
+  if (header) header.remove();
+  addScheduleNote(`✕ You dismissed all ${cards.length} proposed changes`, 'dismiss');
+  chatHistory.push({ role:'user', content: `[All ${cards.length} proposed schedule changes dismissed — none applied] ${titles.join('; ')}. Please don't assume any of these happened.` });
+  if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+}
+
+function handleStravaRedirectParams() {
+  const params = new URLSearchParams(window.location.search);
+  const connected = params.get('strava_connected');
+  const err = params.get('strava_error');
+  if (!connected && !err) return;
+  // Clean the URL so a refresh doesn't re-trigger this
+  window.history.replaceState({}, '', window.location.pathname);
+  if (err) {
+    const messages = {
+      no_code: 'Strava did not return an authorisation code. Please try connecting again.',
+      missing_state: 'Connection request was invalid. Please try connecting again.',
+      invalid_state: 'Connection request expired or was already used. Please try reconnecting.',
+      state_expired: 'Connection request timed out. Please try reconnecting.',
+      token_exchange_failed: 'Strava could not verify the connection. Please try again.',
+      save_failed: 'Connected to Strava but could not save it — please try again.',
+    };
+    setTimeout(() => alert(messages[err] || ('Strava connection error: ' + err)), 300);
+  }
+}
+
+function updateCountdowns() {
+  if (!userProfile?.goal_date) return;
+  const days = Math.ceil((new Date(userProfile.goal_date) - new Date()) / 86400000);
+  document.getElementById('d-days').textContent = days > 0 ? days : '—';
+  document.getElementById('d-days-sub').textContent = userProfile.goal_event || 'Your goal event';
+}
+
+function updateGoalDisplay() {
+  if (!userProfile?.goal_type) return;
+  const goalNames = {
+    uci_qualifier: 'UCI Gran Fondo Worlds Qualifier',
+    gran_fondo: 'Gran Fondo',
+    fitness: 'General Fitness',
+    century: 'Century Ride'
+  };
+  const goalName = goalNames[userProfile.goal_type] || 'Training goal';
+  const event = userProfile.goal_event || '';
+  const date = userProfile.goal_date ? new Date(userProfile.goal_date).toLocaleDateString('en-AU', {day:'numeric',month:'long',year:'numeric'}) : '';
+  const days = userProfile.goal_date ? Math.ceil((new Date(userProfile.goal_date) - new Date()) / 86400000) : null;
+
+  document.getElementById('goal-display').innerHTML = `
+    <div class="goal-banner">
+      <div class="event">${goalName}${event ? ' — ' + event : ''}</div>
+      <div class="details">${date ? date + (days > 0 ? ' · ' + days + ' days away' : '') : 'No date set'}</div>
+    </div>
+    ${userProfile.ftp ? `<div class="box box-orange" style="margin-top:0"><strong>Est. FTP:</strong> ${userProfile.ftp}W · <strong>W/kg:</strong> ${(userProfile.ftp/(userProfile.weight||80)).toFixed(2)} · <strong>Training:</strong> ${userProfile.hours_per_week||'?'}h/week</div>` : ''}
+  `;
+
+  // Update target time card
+  if (userProfile.goal_type === 'uci_qualifier') {
+    document.getElementById('d-target').textContent = '4h 30m';
+    document.getElementById('d-target-sub').textContent = 'Top 25% qualifier target';
+  } else if (userProfile.goal_type === 'gran_fondo') {
+    document.getElementById('d-target').textContent = 'Finish';
+    document.getElementById('d-target-sub').textContent = 'Strong completion';
+  }
+}
+
+function updateWeeklyPlan() {
+  if (!userProfile?.goal_type) return;
+  const hours = userProfile.hours_per_week || 10;
+  const isHighVolume = hours >= 13;
+  const ftp = userProfile.ftp || 215;
+  const weight = userProfile.weight || 80;
+  const isUCI = userProfile.goal_type === 'uci_qualifier';
+  const isGranFondo = userProfile.goal_type === 'gran_fondo' || isUCI;
+
+  // HR zones based on FTP (estimated max HR from FTP)
+  const estMaxHR = Math.round(ftp / 1.22);
+  const z1hr = Math.round(estMaxHR * 0.60);
+  const z2hr = Math.round(estMaxHR * 0.72);
+  const z3hr = Math.round(estMaxHR * 0.83);
+  const z4lo = Math.round(estMaxHR * 0.88);
+  const z4hi = Math.round(estMaxHR * 0.95);
+  const z5hr = Math.round(estMaxHR * 0.98);
+
+  // Power zones
+  const z1w = Math.round(ftp * 0.55);
+  const z2w = Math.round(ftp * 0.75);
+  const z3w = Math.round(ftp * 0.90);
+  const z4low = Math.round(ftp * 0.91);
+  const z4hiw = Math.round(ftp * 1.05);
+  const z5w = Math.round(ftp * 1.20);
+
+  const tueDur = hours >= 10 ? '90' : '60';
+  const sunDur = isHighVolume ? '5–6' : '3.5–5';
+  const satSession = isUCI ? 'Fatigue climbs' : isGranFondo ? 'Climbing intervals' : 'Hard intervals';
+
+  document.getElementById('week-content').innerHTML = `
+    <div class="wk">
+      <div class="dc d-rest"><div class="dn">Mon</div><div class="dt" style="color:var(--mist)">Rest</div><div class="dl">Off/stretch</div></div>
+      <div class="dc d-easy indoor"><div class="dn">Tue</div><div class="dt">Z2 Endurance</div><div class="dl">${tueDur} min</div></div>
+      <div class="dc d-thresh"><div class="dn">Wed</div><div class="dt">Threshold</div><div class="dl">3×12 min Z4</div></div>
+      <div class="dc d-easy"><div class="dn">Thu</div><div class="dt">Recovery</div><div class="dl">60 min Z1</div></div>
+      <div class="dc d-social"><div class="dn">Fri</div><div class="dt">Social</div><div class="dl">2–3 h group</div></div>
+      <div class="dc d-fatigue"><div class="dn">Sat</div><div class="dt">${satSession}</div><div class="dl">2 h outdoors</div></div>
+      <div class="dc d-long"><div class="dn">Sun</div><div class="dt">Long ride</div><div class="dl">${sunDur} h</div></div>
+    </div>
+
+    <p class="slabel" style="margin-top:0.5rem">Day-by-day detail</p>
+    <div class="tl">
+      <div class="tl-row">
+        <div class="tl-dot" style="background:var(--gravel)"></div>
+        <div class="tl-date">Mon — Rest</div>
+        <div class="tl-text">Full off day. Stretch, foam roll. Non-negotiable recovery — especially important for masters athletes. Let Sunday's work absorb.</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-dot" style="background:var(--green)"></div>
+        <div class="tl-date">Tue — Z2</div>
+        <div class="tl-text"><strong>${tueDur} min endurance.</strong> Keep HR under ${z2hr} bpm (${z2w}W est). Conversational pace — if you can't hold a sentence, ease off. 85–90 rpm cadence. Rollers or flat roads. Fan on if indoors.</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-dot" style="background:var(--yellow)"></div>
+        <div class="tl-date">Wed — Threshold</div>
+        <div class="tl-text"><strong>3×12 min Z4 intervals.</strong> Warm up 15 min. Each effort at ${z4lo}–${z4hi} bpm (${z4low}–${z4hiw}W est), 70–75 rpm. 5 min easy between. Cool down 15 min. ${ftp < 220 ? 'Indoors on rollers works well for this session.' : 'Use a consistent climb or flat road for each effort.'}</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-dot" style="background:var(--green)"></div>
+        <div class="tl-date">Thu — Recovery</div>
+        <div class="tl-text"><strong>60 min easy Z1.</strong> HR under ${z1hr} bpm (${z1w}W est). Flat roads only — no climbs. This ride exists to flush Wednesday's efforts. No heroics.</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-dot" style="background:#6BA3E8"></div>
+        <div class="tl-date">Fri — Social</div>
+        <div class="tl-text"><strong>2–3 h group/social ride.</strong> ${isGranFondo ? 'Include at least one real climb — this pre-loads fatigue for Saturday\u2019s key session intentionally.' : 'Ride at group pace, enjoy the company. Mixed terrain.'} Target avg HR ${z2hr}–${z3hr} bpm across the ride.</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-dot" style="background:var(--orange-hi)"></div>
+        <div class="tl-date">Sat — ${satSession}</div>
+        <div class="tl-text">${isUCI ? 
+          `<strong>2 h fatigue climbing outdoors.</strong> 45–60 min easy warm-up, then 3×8 min hard climbing at ${z4lo}–${z4hi} bpm (${z4low}–${z4hiw}W est) on a sustained climb. Only 3 min recovery between efforts — the short recovery simulates climbing on tired legs at your target event. Must be outdoors.` :
+          isGranFondo ?
+          `<strong>2 h climbing intervals.</strong> Warm up 45 min, then 4×6 min hard climbing at ${z4lo}–${z4hi} bpm (${z4low}–${z4hiw}W est). 4 min easy between. Focus on seated climbing at 75–80 rpm.` :
+          `<strong>2 h interval session.</strong> Warm up 20 min, then 5×4 min Z5 efforts at ${z5hr}+ bpm (${z5w}+ W est), full recovery between. Builds your aerobic ceiling.`
+        }</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-dot" style="background:var(--orange)"></div>
+        <div class="tl-date">Sun — Long ride</div>
+        <div class="tl-text">${isUCI ?
+          `<strong>${sunDur} h race simulation.</strong> Build toward ${Math.round((hours >= 13 ? 130 : 110))} km with ${Math.round((hours >= 13 ? 1800 : 1400))} m climbing. Structure like your target event: big climb early, flat Z2 recovery section, second climb when fatigued. Keep avg HR under ${z2hr} bpm (${z2w}W est). Eat every 25 min from the gun — practise your race-day nutrition.` :
+          isGranFondo ?
+          `<strong>${sunDur} h endurance ride.</strong> ${Math.round((hours >= 13 ? 100 : 80))} km with ${Math.round((hours >= 13 ? 1200 : 800))} m climbing. Z2 pace throughout — HR under ${z2hr} bpm. Include one sustained climb. Eat every 30 min.` :
+          `<strong>${sunDur} h long Z2 ride.</strong> Build distance and time in the saddle. HR under ${z2hr} bpm throughout. Flat to rolling terrain. Eat and drink consistently.`
+        }</div>
+      </div>
+    </div>
+
+    <div class="box box-orange">
+      <strong>Weekly load: ~${hours * 55}–${hours * 65} TSS.</strong>
+      ${isUCI ? 'Saturday fatigue climbing is your most race-specific session — protect it above all others.' : 'Sunday long ride is your most important session of the week.'}
+      ${ftp ? ` All targets based on your ${ftp}W FTP (${(ftp/weight).toFixed(2)} W/kg).` : ' Update your FTP in Profile for more accurate targets.'}
+    </div>
+  `;
+}
+
+function updateZones() {
+  const ftp = userProfile?.ftp || 0;
+  const weight = userProfile?.weight || 80;
+  if (!ftp) return;
+
+  // Estimate max HR from FTP (calibrated: FTP = maxHR * 1.22)
+  // Also use max HR from Strava data if available
+  const stravaMaxHR = parseInt(document.getElementById('d-ftp-sub')?.textContent?.match(/max HR (\d+)/)?.[1]) || 0;
+  const estMaxHR = stravaMaxHR || Math.round(ftp / 1.22);
+
+  const powerZones = [
+    { id: 'z1', pLo: 0,              pHi: Math.round(ftp * 0.55) },
+    { id: 'z2', pLo: Math.round(ftp * 0.56), pHi: Math.round(ftp * 0.75) },
+    { id: 'z3', pLo: Math.round(ftp * 0.76), pHi: Math.round(ftp * 0.90) },
+    { id: 'z4', pLo: Math.round(ftp * 0.91), pHi: Math.round(ftp * 1.05) },
+    { id: 'z5', pLo: Math.round(ftp * 1.06), pHi: Math.round(ftp * 1.20) },
+    { id: 'z6', pLo: Math.round(ftp * 1.21), pHi: null },
+  ];
+
+  const hrZones = [
+    { id: 'z1', hLo: 0,                          hHi: Math.round(estMaxHR * 0.60) },
+    { id: 'z2', hLo: Math.round(estMaxHR * 0.61), hHi: Math.round(estMaxHR * 0.72) },
+    { id: 'z3', hLo: Math.round(estMaxHR * 0.73), hHi: Math.round(estMaxHR * 0.83) },
+    { id: 'z4', hLo: Math.round(estMaxHR * 0.84), hHi: Math.round(estMaxHR * 0.94) },
+    { id: 'z5', hLo: Math.round(estMaxHR * 0.95), hHi: Math.round(estMaxHR * 1.00) },
+    { id: 'z6', hLo: Math.round(estMaxHR * 1.00), hHi: null },
+  ];
+
+  powerZones.forEach(z => {
+    const el = document.getElementById(z.id + '-range');
+    if (el) el.textContent = z.pHi ? z.pLo + '–' + z.pHi + ' W' : '>' + z.pLo + ' W';
+  });
+
+  hrZones.forEach(z => {
+    const el = document.getElementById(z.id + '-hr');
+    if (el) el.textContent = z.hHi ? z.hLo + '–' + z.hHi + ' bpm' : '>' + z.hLo + ' bpm';
+  });
+
+  document.getElementById('zones-note').innerHTML =
+    '<strong>Based on FTP ' + ftp + 'W (' + (ftp/weight).toFixed(2) + ' W/kg at ' + weight + 'kg)</strong> · ' +
+    'Est. max HR ' + estMaxHR + ' bpm. ' +
+    'Update your FTP in Profile after a 20-min test effort for more accurate zones.';
+}
+
+function updateCoachWelcome() {
+  if (!userProfile?.name) return;
+  const name = userProfile.name;
+  const goal = userProfile.goal_event || (userProfile.goal_type === 'uci_qualifier' ? 'UCI Gran Fondo qualifier' : 'your cycling goal');
+  const days = userProfile.goal_date ? Math.ceil((new Date(userProfile.goal_date) - new Date()) / 86400000) : null;
+  const daysText = days && days > 0 ? ` You have ${days} days to prepare.` : '';
+  document.getElementById('coach-welcome').textContent = `G'day ${name}! I'm your VAMIQ coach. I'm here to help you reach ${goal}.${daysText} What do you want to work on today?`;
+}
+
+function editGoal() { showScreen('onboarding'); nextStep(2); }
+
+async function reconnectStrava() {
+  await startStravaAuth();
+}
+
+async function disconnectStrava() {
+  if (!confirm('Disconnect Strava and permanently delete your Strava data from VAMIQ? This can\'t be undone — you can reconnect any time.')) return;
+
+  const statusEl = document.getElementById('strava-disconnect-status');
+  statusEl.style.display = 'block';
+  statusEl.style.color = 'var(--mist)';
+  statusEl.style.fontSize = '12px';
+  statusEl.textContent = 'Disconnecting…';
+
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { statusEl.textContent = 'Please sign in again.'; return; }
+    const r = await fetch('/api/strava-disconnect', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + session.access_token }
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Could not disconnect');
+
+    userProfile = { ...userProfile, strava_access_token: null, strava_refresh_token: null };
+    document.getElementById('strava-pill').style.display = 'none';
+    document.getElementById('rides-list').innerHTML = '<p style="color:var(--mist);font-size:13px">Click ↻ Sync to load your rides.</p>';
+    loadProfileTab();
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = '✓ Disconnected — your Strava data has been deleted from VAMIQ.';
+    setTimeout(() => { statusEl.style.display = 'none'; }, 6000);
+  } catch (e) {
+    statusEl.style.color = '#FF8585';
+    statusEl.textContent = 'Could not disconnect: ' + e.message + '. Please try again or email support@vamiq.au.';
+  }
+}
+
+function loadProfileTab() {
+  if (!userProfile) return;
+  const p = userProfile;
+
+  // Show Strava connection status
+  const isConnected = !!p.strava_access_token;
+  document.getElementById('strava-profile-status').style.display = isConnected ? 'block' : 'none';
+  document.getElementById('strava-profile-disconnected').style.display = isConnected ? 'none' : 'block';
+  document.getElementById('strava-connect-btn').style.display = isConnected ? 'none' : 'flex';
+  document.getElementById('strava-disconnect-btn').style.display = isConnected ? 'block' : 'none';
+
+  // Show account email
+  const emailEl = document.getElementById('profile-email');
+  if (emailEl && currentUser?.email) emailEl.textContent = 'Signed in as ' + currentUser.email;
+  document.getElementById('p-name').value = p.name || '';
+  document.getElementById('p-age').value = p.age || '';
+  document.getElementById('p-weight').value = p.weight || '';
+  document.getElementById('p-ftp').value = p.ftp || '';
+  document.getElementById('p-hours').value = p.hours_per_week || '10';
+  document.getElementById('p-power').value = p.has_power_meter || 'no';
+  document.getElementById('p-experience').value = p.experience || 'intermediate';
+  document.getElementById('p-goal-text').value = p.goal_text || '';
+  document.getElementById('p-event').value = p.goal_event || '';
+  document.getElementById('p-event-date').value = p.goal_date || '';
+
+  const goalLabels = { uci_qualifier:'UCI Gran Fondo Worlds Qualifier', gran_fondo:'Gran Fondo', fitness:'General Fitness', century:'Century Ride' };
+  const days = p.goal_date ? Math.ceil((new Date(p.goal_date)-new Date())/86400000) : null;
+  document.getElementById('profile-display').innerHTML = 
+    `<strong>${p.name||'Athlete'}</strong> · Age ${p.age||'?'} · ${p.weight||'?'}kg · FTP ${p.ftp||'est.'}W<br>
+    <strong>Goal:</strong> ${goalLabels[p.goal_type]||'not set'}${p.goal_event?' — '+p.goal_event:''}<br>
+    ${p.goal_date?'<strong>Event date:</strong> '+new Date(p.goal_date).toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})+(days>0?' ('+days+' days away)':''):'No event date set'}`;
+}
+
+async function saveProfileEdits() {
+  const updates = {
+    name: document.getElementById('p-name').value.trim(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    age: parseInt(document.getElementById('p-age').value) || null,
+    weight: parseFloat(document.getElementById('p-weight').value) || null,
+    ftp: parseInt(document.getElementById('p-ftp').value) || null,
+    hours_per_week: parseInt(document.getElementById('p-hours').value) || null,
+    has_power_meter: document.getElementById('p-power').value,
+    experience: document.getElementById('p-experience').value,
+    goal_text: document.getElementById('p-goal-text').value.trim(),
+    goal_event: document.getElementById('p-event').value.trim(),
+    goal_date: document.getElementById('p-event-date').value || null,
+  };
+  await saveProfile({ ...userProfile, ...updates });
+  userProfile = { ...userProfile, ...updates };
+  updateGoalDisplay();
+  updateWeeklyPlan();
+  updateCountdowns();
+  updateCoachWelcome();
+  if (updates.ftp) updateZones();
+  loadProfileTab();
+  const saved = document.getElementById('profile-saved');
+  saved.style.display = 'block';
+  setTimeout(() => saved.style.display = 'none', 3000);
+}
+
+function showUserMenu() {
+  if (confirm(`Signed in as ${currentUser?.email}\n\nSign out?`)) {
+    sb.auth.signOut();
+  }
+}
+
+// ── NAVIGATION ──
+function show(id, btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+  if (id === 'profile') loadProfileTab();
+  if (id === 'calendar') {
+    calStartDate = new Date();
+    renderCalendar();
+    document.getElementById('cal-month-view').style.display = 'block';
+    document.getElementById('cal-week-view').style.display = 'none';
+  }
+}
+
+// ── STRAVA ──
+async function syncStrava() {
+  if (!userProfile?.strava_access_token) {
+    showSyncError('No Strava account connected. Go to Profile to connect Strava.');
+    return;
+  }
+  const btn = document.getElementById('sync-btn');
+  btn.textContent = '↻ Syncing...';
+  btn.disabled = true;
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { showSyncError('Please sign in again.'); btn.textContent = '↻ Sync'; btn.disabled = false; return; }
+    const r = await fetch('/api/strava', { headers: { Authorization: 'Bearer ' + session.access_token } });
+    const data = await r.json();
+
+    // Check for our own server-side errors (auth/connection issues)
+    if (data.error) {
+      showSyncError(data.error);
+      btn.textContent = '↻ Sync'; btn.disabled = false;
+      return;
+    }
+
+    // Check for Strava API errors
+    if (data.message) {
+      const msg = data.message;
+      if (msg.includes('Authorization') || msg.includes('invalid_token') || data.errors?.[0]?.code === 'missing') {
+        showSyncError('Strava authorisation failed — your token may have expired. Please reconnect Strava in Profile.');
+      } else if (msg.includes('Limit') || msg.includes('quota')) {
+        showSyncError('Strava API limit reached — the app needs production access approval. Contact hello@vamiq.au');
+      } else {
+        showSyncError('Strava error: ' + msg);
+      }
+      btn.textContent = '↻ Sync'; btn.disabled = false;
+      return;
+    }
+
+    if (Array.isArray(data) && data.length > 0) {
+      renderRides(data);
+      updateDashboard(data);
+      document.getElementById('strava-pill').style.display = 'flex';
+      btn.textContent = '✓ Synced';
+      hideSyncError();
+      setTimeout(() => { btn.textContent = '↻ Sync'; btn.disabled = false; }, 3000);
+    } else if (Array.isArray(data) && data.length === 0) {
+      btn.textContent = '↻ Sync'; btn.disabled = false;
+      showSyncError('No rides found in Strava — make sure your activities are set to public or followers.');
+    } else {
+      btn.textContent = '↻ Sync'; btn.disabled = false;
+      showSyncError('Unexpected response from Strava. Try again or reconnect in Profile.');
+    }
+  } catch(e) {
+    btn.textContent = '↻ Sync'; btn.disabled = false;
+    showSyncError('Connection error: ' + e.message);
+  }
+}
+
+function showSyncError(msg) {
+  let el = document.getElementById('sync-error');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'sync-error';
+    el.style.cssText = 'background:#2E0A0A;border:1px solid #5A1010;color:#FF8585;font-size:12px;padding:8px 12px;border-radius:8px;margin:8px 1.25rem 0;line-height:1.5';
+    const nav = document.querySelector('.app-nav');
+    nav.parentNode.insertBefore(el, nav.nextSibling);
+  }
+  el.textContent = '⚠️ ' + msg;
+  el.style.display = 'block';
+}
+
+function hideSyncError() {
+  const el = document.getElementById('sync-error');
+  if (el) el.style.display = 'none';
+}
+
+
+function updateDashboard(rides) {
+  const cycling = rides.filter(r => r.type === 'Ride' || r.sport_type === 'Ride' || r.type === 'VirtualRide' || r.sport_type === 'VirtualRide');
+  const outdoor = cycling.filter(r => r.distance > 50000);
+  const weight = userProfile?.weight || 80;
+
+  // Last ride
+  if (cycling.length) {
+    const last = cycling[0];
+    const isIndoor = last.distance === 0 || last.trainer === true || last.type === 'VirtualRide' || last.sport_type === 'VirtualRide';
+    const mins = Math.round(last.moving_time/60);
+    const h = Math.floor(mins/60); const m = mins%60;
+    const date = new Date(last.start_date_local).toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+    document.getElementById('d-last').textContent = isIndoor ? mins+'m' : h+'h '+m+'m';
+    document.getElementById('d-last-sub').textContent = isIndoor ? 'Roller · '+date : (last.distance/1000).toFixed(0)+'km · '+date;
+    // Summary
+    document.getElementById('d-summary').innerHTML = `<strong>Latest ride loaded.</strong> ${date}: ${isIndoor?mins+' min indoor':(last.distance/1000).toFixed(1)+'km, '+Math.round(last.total_elevation_gain)+'m, '+h+'h '+m+'min'}${last.average_heartrate?', avg '+Math.round(last.average_heartrate)+' bpm':''}${last.pr_count>0?', '+last.pr_count+' PRs':''}. Keep building toward your goal!`;
+  }
+
+  // Best long ride
+  if (outdoor.length) {
+    const best = outdoor.reduce((a,b) => a.distance > b.distance ? a : b);
+    const mins = Math.round(best.moving_time/60);
+    document.getElementById('d-best').textContent = Math.floor(mins/60)+'h '+(mins%60)+'m';
+    document.getElementById('d-best-sub').textContent = (best.distance/1000).toFixed(0)+'km · '+Math.round(best.total_elevation_gain)+'m';
+  }
+
+  // FTP from max HR or profile
+  const ftp = userProfile?.ftp || (() => {
+    const allMax = cycling.filter(r=>r.max_heartrate>0).map(r=>r.max_heartrate);
+    const maxHR = allMax.length ? Math.max(...allMax) : 0;
+    return maxHR > 0 ? Math.min(Math.max(Math.round(maxHR * 1.22), 150), 350) : 0;
+  })();
+
+  if (ftp) {
+    const wkg = (ftp/weight).toFixed(2);
+    document.getElementById('d-ftp').textContent = '~'+ftp+' W';
+    document.getElementById('d-ftp-sub').textContent = userProfile?.ftp ? 'From your profile' : 'Est. from max HR';
+    document.getElementById('d-wkg').textContent = wkg;
+
+    // Update zones
+    if (!userProfile?.ftp) {
+      userProfile = { ...userProfile, ftp };
+    }
+    updateZones();
+  }
+
+  // Progress bars
+  if (outdoor.length && userProfile?.goal_date) {
+    const bestDist = Math.max(...outdoor.map(r=>r.distance));
+    const targetDist = userProfile.goal_type === 'century' ? 100000 : 122000;
+    const bestElev = Math.max(...outdoor.map(r=>r.total_elevation_gain));
+    const targetElev = userProfile.goal_type === 'uci_qualifier' ? 1869 : 1200;
+    // Only use long outdoor rides (>50km) for time-based metrics
+    const longOutdoor = outdoor.filter(r => r.distance > 50000);
+    const bestTime = longOutdoor.length ? Math.max(...longOutdoor.map(r=>r.moving_time)) : 0;
+    const targetTime = 270 * 60; // 4h 30min in seconds
+
+    const p1 = Math.min(Math.round(bestDist/targetDist*100), 95);
+    const p2 = Math.min(Math.round(bestElev/targetElev*85), 90);
+    const p3 = Math.min(Math.round(bestTime/targetTime*90), 90);
+    const p4 = Math.min(Math.round((p1+p2+p3)/3*0.8), 85);
+
+    [['p1',p1],['p2',p2],['p3',p3],['p4',p4]].forEach(([id,val]) => {
+      document.getElementById(id).style.width = val+'%';
+      document.getElementById(id+'-pct').textContent = val+'%';
+    });
+  }
+}
+
+// ── CHAT ──
+function buildSystemPrompt() {
+  const p = userProfile || {};
+  const goalLabels = { uci_qualifier:'UCI Gran Fondo Worlds qualifier', gran_fondo:'Gran Fondo completion', fitness:'general fitness', century:'century ride (100km+)' };
+  const days = p.goal_date ? Math.ceil((new Date(p.goal_date)-new Date())/86400000) : null;
+
+  // Detect user's local timezone dynamically
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const userUTCOffset = -(new Date().getTimezoneOffset()/60);
+  const userUTCOffsetStr = (userUTCOffset >= 0 ? '+' : '') + userUTCOffset;
+  const todayStr = new Date().toISOString().slice(0,10);
+  const todayDay = new Date().toLocaleDateString('en-AU', { weekday: 'long' });
+
+  const rideContext = window.CURRENT_RIDE_CONTEXT ? ("\n\n" + window.CURRENT_RIDE_CONTEXT) : "";
+
+  return `You are VAMIQ, an expert AI cycling coach. You adapt to every athlete's individual goals and data.
+
+ATHLETE PROFILE:
+- Name: ${p.name||'the athlete'}
+- Age: ${p.age||'unknown'} · Weight: ${p.weight||'unknown'}kg
+- Experience: ${p.experience||'unknown'}
+- FTP: ${p.ftp||'unknown'}W${p.ftp&&p.weight?' ('+( p.ftp/p.weight).toFixed(2)+' W/kg)':''}
+- Power meter: ${p.has_power_meter||'unknown'}
+- Training hours/week (profile target): ${p.hours_per_week||'unknown'}h (use actual Strava hours from ride data below if available — it is more accurate)
+
+GOAL (in athlete's own words):
+${p.goal_text || 'Not specified'}
+
+GOAL SUMMARY:
+- Type: ${goalLabels[p.goal_type]||'not set'}
+- Event: ${p.goal_event||'not specified'}
+- Date: ${p.goal_date||'not set'}${days?' ('+days+' days away, '+Math.ceil(days/7)+' weeks)':''}
+- Current training phase: ${p.goal_date ? getPhase(new Date()) : 'unknown'}
+- Weeks to event: ${p.goal_date ? Math.ceil((new Date(p.goal_date)-new Date())/(7*86400000)) : 'unknown'}
+
+ATHLETE'S WEEKLY SCHEDULE (timezone: \${userTimezone}):
+- Monday: Rest
+- Tuesday: Z2 endurance (rollers/indoors)
+- Wednesday: Threshold intervals (rollers/indoors)
+- Thursday: Easy recovery ride outdoors
+- Friday: Social/group ride outdoors
+- Saturday: Fatigue climbing or intervals outdoors
+- Sunday: Long ride outdoors (the key weekly session)
+Note: All ride dates are in the athlete's local time (\${userTimezone}). Do not adjust.
+
+WEEK-BY-WEEK ADAPTATION:
+- 8+ weeks out: Base phase — long Z2, 3x12min threshold, fatigue climbing 3x8min
+- 4-8 weeks out: Build phase — increase to 4x12min threshold, 4x8min fatigue climbs, longer long rides
+- 3 weeks out: Sharpen phase — reduce volume slightly, race simulation session, full nutrition practice
+- 2 weeks out: Taper phase — cut volume by roughly 50% vs peak, but KEEP intensity (efforts stay at race pace/threshold, just fewer/shorter reps). Long ride roughly halved.
+- Race week (final week before the event): cut volume by roughly 70% vs peak, with only brief, limited race-pace reminders (a few short efforts, nothing that creates fatigue). Rest and prepare.
+You MUST prescribe sessions appropriate to the current phase, and be precise about which taper stage the athlete is in — 2 weeks out and race week are NOT the same and should not get identical advice. Never give base-phase or build-phase sessions once the athlete is within 3 weeks of their event.
+
+TIMEZONE NOTE: Athlete timezone is \${userTimezone} (UTC offset \${userUTCOffset}). Strava activity dates provided use start_date_local which is already in the athlete's local time. Do NOT adjust dates — treat all dates and days as-is in the athlete's local time.
+
+TODAY: ${todayStr} (${todayDay}), in the athlete's local time.
+
+CHANGING THE ATHLETE'S CALENDAR:
+If the athlete asks you to change one or more days' sessions (e.g. "make Saturday easier", "swap Tuesday for rest", "I'm sick this week", "I'm travelling next week and can't train properly"), you can propose concrete changes to their actual calendar — one day or many. Do NOT apply changes silently — always briefly confirm in plain conversational text what you're proposing and why, THEN append one machine-readable block per changed day in EXACTLY this format, with no other text inside each block:
+
+[[SCHEDULE_CHANGE]]{"date":"YYYY-MM-DD","type":"rest|easy|threshold|social|fatigue|long","title":"Short session title","detail":"Full session description shown to the athlete, written the same way as your normal coaching advice","risk_note":"Optional — only include this field if this specific change puts the athlete's goal at meaningful risk (lost fitness, reduced race readiness, needs downstream compensation). Explain the risk in one concise sentence. Omit this field entirely if there is no meaningful risk."}[[/SCHEDULE_CHANGE]]
+
+Rules:
+- Only emit blocks when the athlete has clearly asked for a specific, concrete calendar change — not for general questions or advice.
+- Use the athlete's actual calendar dates (calculate from TODAY above), not vague day names alone.
+- MULTI-DAY CHANGES: for scenarios spanning several days (illness, travel, injury, work trip, etc.), propose one block per affected day, covering the FULL affected period, not just the first day. The athlete will see a "Confirm all" option as well as individual confirm buttons.
+- GOAL RISK: before proposing any change, think about whether it meaningfully affects the athlete's readiness for their goal event — e.g. losing key Build-phase sessions, missing the last big fatigue-climb before taper, or being sick during a critical week. If so: (a) say so plainly in your conversational reply — do not downplay or hide it, (b) include the risk_note field on the relevant day(s) explaining the specific risk, and (c) where sensible, suggest how the rest of the plan should adapt to compensate (e.g. extending Build phase by a few days, adjusting expectations for race day, or prioritising which missed sessions matter most). Minor changes (e.g. swapping one easy day for another easy day) do not need a risk_note — reserve it for genuine risk to the goal.
+- Place all blocks at the very end of your reply, after your conversational explanation.
+- The athlete will see a Confirm button and must approve before anything is actually changed — so it's safe to propose. Say so naturally in your reply (e.g. "I've set that up below — hit confirm if that works for you").
+- Keep proposed sessions consistent with the athlete's current training phase and the taper/phase rules above, unless the athlete's situation (illness, travel) means the normal phase progression genuinely can't apply right now.
+
+IMPORTANT: The athlete's goal description above is the most important context. Read it carefully and tailor ALL coaching advice specifically to what they have described. If they mention a specific event, date, qualification standard or performance target, focus your coaching on that. Be specific, practical and encouraging. Australian casual tone. Concise but actionable.` + rideContext;
+}
+
+async function send() {
+  const inp = document.getElementById('cinput');
+  const msg = inp.value.trim();
+  if (!msg) return;
+  inp.value = ''; inp.style.height = 'auto';
+  addMsg('user', msg);
+  document.getElementById('sbtn').disabled = true;
+  inp.disabled = true;
+  const t = addTyping();
+  chatHistory.push({ role:'user', content:msg });
+  // Cap history at 20 messages to prevent unbounded memory growth
+  if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+  try {
+    const r = await fetch('/api/chat', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:2200, stream:true, system: buildSystemPrompt()+liveRides, messages:chatHistory })
+    });
+
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error||'API error'); }
+
+    // Streaming response
+    t.remove();
+    const msgEl = addMsg('coach', '');
+    const bubbleEl = msgEl.querySelector('.mbub');
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let fullReply = '';
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep incomplete line
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') break;
+        try {
+          const parsed = JSON.parse(data);
+          const delta = parsed.delta?.text || '';
+          if (delta) {
+            fullReply += delta;
+            const liveDisplay = fullReply.split('[[SCHEDULE_CHANGE]]')[0];
+            bubbleEl.innerHTML = liveDisplay.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+            // Auto scroll
+            const msgs = document.getElementById('chat-msgs');
+            msgs.scrollTop = msgs.scrollHeight;
+          }
+        } catch(e) {}
+      }
+    }
+
+    // Extract any schedule-change proposals the coach included, strip them from
+    // the visible text, and render confirm/dismiss cards for each one.
+    const changeRegex = /\[\[SCHEDULE_CHANGE\]\]([\s\S]*?)\[\[\/SCHEDULE_CHANGE\]\]/g;
+    const proposals = [];
+    let match;
+    while ((match = changeRegex.exec(fullReply)) !== null) {
+      try { proposals.push(JSON.parse(match[1].trim())); } catch (e) {}
+    }
+    const displayText = fullReply.replace(changeRegex, '').trim();
+    bubbleEl.innerHTML = displayText.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+
+    const validProposals = proposals.filter(p => p.date && p.type && p.title && p.detail);
+    if (validProposals.length) {
+      const groupId = 'spg-' + Date.now();
+      const group = document.createElement('div');
+      group.className = 'schedule-proposal-group';
+      group.id = groupId;
+      group.style.cssText = 'margin-top:8px;max-width:85%';
+
+      if (validProposals.length > 1) {
+        const header = document.createElement('div');
+        header.style.cssText = 'display:flex;gap:8px;margin-bottom:8px';
+        header.innerHTML = `
+          <button class="btn-primary" style="width:auto;margin:0;padding:6px 12px;font-size:12px;flex:none" onclick="applyAllScheduleChanges('${groupId}', this)">Confirm all ${validProposals.length} changes</button>
+          <button class="skip-btn" style="width:auto;padding:6px 12px;font-size:12px;flex:none" onclick="dismissAllScheduleProposals('${groupId}')">Dismiss all</button>`;
+        group.appendChild(header);
+      }
+
+      validProposals.forEach((p, idx) => {
+        const dateLabel = new Date(p.date + 'T00:00:00').toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'short' });
+        const hasRisk = !!p.risk_note;
+        const card = document.createElement('div');
+        card.className = 'schedule-proposal-card';
+        card.dataset.proposal = JSON.stringify(p);
+        card.style.cssText = `background:var(--asphalt);border:1px solid ${hasRisk?'#5A2010':'var(--gravel)'};border-radius:var(--r);padding:12px 14px;margin-bottom:8px;font-size:13px`;
+        card.innerHTML = `
+          <div style="font-size:11px;color:var(--mist);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Proposed change · ${dateLabel}</div>
+          <div style="font-weight:600;margin-bottom:2px">${escapeHtml(p.title)}</div>
+          <div style="color:var(--fog);margin-bottom:${hasRisk?'8px':'10px'}">${escapeHtml(p.detail)}</div>
+          ${hasRisk ? `<div style="background:var(--orange-lo);border:1px solid #5A2010;border-radius:6px;padding:6px 10px;color:#FFB085;font-size:12px;margin-bottom:10px">⚠️ ${escapeHtml(p.risk_note)}</div>` : ''}
+          <div style="display:flex;gap:8px">
+            <button class="btn-primary sp-confirm-btn" style="width:auto;margin:0;padding:6px 12px;font-size:12px;flex:none" onclick='applyScheduleChange(${JSON.stringify(p).replace(/'/g,"&#39;")}, this)'>Confirm &amp; apply</button>
+            <button class="skip-btn sp-dismiss-btn" style="width:auto;padding:6px 12px;font-size:12px;flex:none" onclick="dismissScheduleProposal(this)">Dismiss</button>
+          </div>`;
+        group.appendChild(card);
+      });
+
+      document.getElementById('chat-msgs').appendChild(group);
+      const msgs = document.getElementById('chat-msgs');
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    chatHistory.push({ role:'assistant', content:fullReply });
+    window.CURRENT_RIDE_CONTEXT = null; // clear after successful send
+  } catch(e) {
+    t.remove();
+    addMsg('coach', '⚠️ '+e.message);
+  }
+  document.getElementById('sbtn').disabled = false;
+  inp.disabled = false;
+  inp.focus();
+}
+
+function addMsg(role, text) {
+  const c = document.getElementById('chat-msgs');
+  const d = document.createElement('div');
+  d.className = 'msg '+role;
+  d.innerHTML = `<div class="mav">${role==='coach'?'🚴':'👤'}</div><div class="mbub">${text.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')}</div>`;
+  c.appendChild(d); c.scrollTop = c.scrollHeight;
+  return d;
+}
+
+function addTyping() {
+  const c = document.getElementById('chat-msgs');
+  const d = document.createElement('div');
+  d.className = 'msg coach';
+  d.innerHTML = '<div class="mav">🚴</div><div class="mbub"><div class="typing"><span></span><span></span><span></span></div></div>';
+  c.appendChild(d); c.scrollTop = c.scrollHeight;
+  return d;
+}
+
+function qa(q) {
+  document.getElementById('cinput').value = q;
+  show('coach', document.querySelectorAll('.nav-tab')[6]);
+  send();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const ta = document.getElementById('cinput');
+  if (!ta) return;
+  ta.addEventListener('input', () => { ta.style.height='auto'; ta.style.height=Math.min(ta.scrollHeight,120)+'px'; });
+  ta.addEventListener('keydown', e => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} });
+});
+
+// ── CALENDAR ──
+let calStartDate = new Date();
+let currentWeekOffset = 0;
+let leafletMap = null;
+let currentRideData = null;
+let currentRideStreams = null;
+
+const TRAINING_TYPES = {
+  0: 'rest',    // Mon
+  1: 'easy',    // Tue
+  2: 'threshold', // Wed
+  3: 'easy',    // Thu
+  4: 'social',  // Fri
+  5: 'fatigue', // Sat
+  6: 'long'     // Sun
+};
+
+const DAY_LABELS = { rest:'Rest', easy:'Z2', threshold:'Threshold', social:'Social', fatigue:'Fatigue climbs', long:'Long ride' };
+const DAY_COLORS = { rest:'var(--gravel)', easy:'var(--green)', threshold:'var(--yellow)', social:'#6BA3E8', fatigue:'var(--orange-hi)', long:'var(--orange)' };
+
+function getTrainingType(date) {
+  const dow = date.getDay(); // 0=Sun,1=Mon...6=Sat
+  const map = { 1:'rest', 2:'easy', 3:'threshold', 4:'easy', 5:'social', 6:'fatigue', 0:'long' };
+  return map[dow];
+}
+
+function getPhase(date) {
+  if (!userProfile?.goal_date) return 'Base';
+  const daysOut = Math.ceil((new Date(userProfile.goal_date) - date) / 86400000);
+  if (daysOut > 90) return 'Base';
+  if (daysOut > 42) return 'Build';
+  if (daysOut > 14) return 'Sharpen';
+  if (daysOut > 7) return 'Taper';
+  if (daysOut > 0) return 'Race Week';
+  return 'Post-race';
+}
+
+function calPrev() {
+  calStartDate.setMonth(calStartDate.getMonth() - 1);
+  renderCalendar();
+}
+
+function calNext() {
+  calStartDate.setMonth(calStartDate.getMonth() + 1);
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const grid = document.getElementById('cal-months-grid');
+  const today = new Date();
+  const months = [];
+
+  // Show 3 months starting from calStartDate
+  for (let m = 0; m < 3; m++) {
+    const d = new Date(calStartDate.getFullYear(), calStartDate.getMonth() + m, 1);
+    months.push(d);
+  }
+
+  document.getElementById('cal-range-title').textContent =
+    months[0].toLocaleDateString('en-AU',{month:'long',year:'numeric'}) + ' – ' +
+    months[2].toLocaleDateString('en-AU',{month:'long',year:'numeric'});
+
+  grid.innerHTML = months.map(monthDate => {
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth();
+    const monthName = monthDate.toLocaleDateString('en-AU',{month:'long',year:'numeric'});
+    const phase = getPhase(monthDate);
+    const phaseColors = {'Base':'var(--green)','Build':'var(--yellow)','Sharpen':'var(--orange)','Taper':'#6BA3E8','Race Week':'var(--orange-hi)','Post-race':'var(--mist)'};
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const startPad = (firstDay + 6) % 7; // Mon=0
+
+    let daysHtml = ['Mo','Tu','We','Th','Fr','Sa','Su'].map(d => `<div class="cal-day-label">${d}</div>`).join('');
+
+    for (let i = 0; i < startPad; i++) daysHtml += '<div class="cal-day empty"></div>';
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day);
+      const dateStr = date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0') + '-' + String(date.getDate()).padStart(2,'0');
+      const override = scheduleOverrides[dateStr];
+      const type = override ? override.session_type : getTrainingType(date);
+      const isToday = date.toDateString() === today.toDateString();
+      const isPast = date < today && !isToday;
+      const isRace = userProfile?.goal_date && date.toDateString() === new Date(userProfile.goal_date).toDateString();
+      const cls = isRace ? 'race' : type;
+      const weekOffset = Math.floor((date - getMonday(today)) / (7 * 86400000));
+      daysHtml += `<div class="cal-day ${cls}${isToday?' today':''}${isPast?' past':''}" style="${override?'box-shadow:0 0 0 1.5px var(--orange-hi) inset;':''}"
+        title="${isRace?'RACE DAY!':(override?'✎ '+escapeHtml(override.title):DAY_LABELS[type])}" 
+        onclick="event.stopPropagation();showWeekFromDate('${dateStr}')">${day}</div>`;
+    }
+
+    // Find first Monday of month (on or after 1st)
+const m1 = new Date(year,month,1);
+const m1Day = m1.getDay(); // 0=Sun
+const daysToMon = m1Day === 1 ? 0 : m1Day === 0 ? 1 : 8 - m1Day;
+const firstMon = new Date(year,month,1+daysToMon);
+return `<div class="cal-month" onclick="showWeekFromDate('${firstMon.getFullYear()}-${String(firstMon.getMonth()+1).padStart(2,'0')}-${String(firstMon.getDate()).padStart(2,'0')}')">
+      <div class="cal-month-header">
+        <div class="cal-month-name">${monthName}</div>
+        <div class="cal-month-phase" style="color:${phaseColors[phase]}">${phase}</div>
+      </div>
+      <div class="cal-grid">${daysHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+function getMonday(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function showWeekFromDate(dateStr) {
+  // Parse as local date (not UTC) to avoid timezone shift
+  const parts = dateStr.split('-');
+  const date = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+  const monday = getMonday(date);
+  const todayMonday = getMonday(new Date());
+  currentWeekOffset = Math.round((monday - todayMonday) / (7 * 86400000));
+  renderWeekDetail();
+  document.getElementById('cal-month-view').style.display = 'none';
+  document.getElementById('cal-week-view').style.display = 'block';
+}
+
+function showCalMonth() {
+  document.getElementById('cal-month-view').style.display = 'block';
+  document.getElementById('cal-week-view').style.display = 'none';
+}
+
+function weekNav(dir) {
+  currentWeekOffset += dir;
+  renderWeekDetail();
+}
+
+function getWeeksOut(fromDate) {
+  if (!userProfile?.goal_date) return null;
+  return Math.ceil((new Date(userProfile.goal_date) - fromDate) / (7 * 86400000));
+}
+
+function renderWeekDetail() {
+  const monday = getMonday(new Date());
+  monday.setDate(monday.getDate() + currentWeekOffset * 7);
+
+  const fmt = (d) => d.toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'});
+  document.getElementById('week-title').textContent = 'Your training week commencing Monday';
+  document.getElementById('week-date').textContent = fmt(monday);
+
+  const ftp = userProfile?.ftp || 215;
+  const weight = userProfile?.weight || 80;
+  const isUCI = userProfile?.goal_type === 'uci_qualifier';
+  const isGranFondo = userProfile?.goal_type === 'gran_fondo' || isUCI;
+  const phase = getPhase(monday);
+  const weeksOut = getWeeksOut(monday);
+
+  const z1hr = Math.round(ftp/1.22*0.60);
+  const z2hr = Math.round(ftp/1.22*0.72);
+  const z3hr = Math.round(ftp/1.22*0.83);
+  const z4lo = Math.round(ftp/1.22*0.88);
+  const z4hi = Math.round(ftp/1.22*0.95);
+  const z4low = Math.round(ftp*0.91);
+  const z4hiw = Math.round(ftp*1.05);
+  const z2w = Math.round(ftp*0.75);
+  const z1w = Math.round(ftp*0.55);
+  const z5w = Math.round(ftp*1.20);
+  const z5hr = Math.round(ftp/1.22*0.98);
+
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(d.getDate() + i);
+    const dateStr = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const override = scheduleOverrides[dateStr];
+    const type = override ? override.session_type : getTrainingType(d);
+    const isRace = userProfile?.goal_date && d.toDateString() === new Date(userProfile.goal_date).toDateString();
+    const isToday = d.toDateString() === new Date().toDateString();
+    const dayName = d.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'short'});
+
+    let detail = '';
+    if (override) {
+      detail = `<strong>${escapeHtml(override.title)}</strong> ${escapeHtml(override.description)} <span style="color:var(--mist);font-size:11px">✎ Adjusted with your coach — <a href="#" onclick="resetScheduleDay('${dateStr}');return false;" style="color:var(--orange-hi)">reset to default</a></span>`;
+    } else if (isRace) {
+      detail = `<strong>🏁 RACE DAY — ${userProfile.goal_event||'Your event'}!</strong> Everything you have trained for. Stick to your pacing plan. Enjoy every kilometre!`;
+    } else if (weeksOut !== null && weeksOut <= 1 && weeksOut > 0) {
+      // Race week — ~70% volume reduction, limited intensity kept
+      if (type === 'rest') detail = 'Rest day. Sleep well, stay off your feet, trust your training.';
+      else if (type === 'easy') detail = `<strong>RACE WEEK — 30 min easy spin only.</strong> HR under ${z1hr} bpm. Just keep the legs ticking over. No effort whatsoever.`;
+      else if (type === 'threshold') detail = `<strong>RACE WEEK — 20 min easy + 3×3 min at race pace.</strong> Just a reminder to your legs what hard feels like. ${z4low}–${z4hiw}W est. Nothing more.`;
+      else if (type === 'social') detail = 'RACE WEEK — skip the group ride or do 30–40 min very easy only. Protect your legs.';
+      else if (type === 'fatigue') detail = `<strong>RACE WEEK — 45 min easy with 2×3 min at race pace.</strong> HR under ${z3hr} bpm. Short, sharp, done. Rest the remainder of the day.`;
+      else if (type === 'long') detail = `<strong>RACE WEEK — 75–90 min easy ride Saturday.</strong> Z1–Z2 only, HR under ${z2hr} bpm. Check your bike, prepare your kit and nutrition. Early night.`;
+    } else if (weeksOut !== null && weeksOut <= 2 && weeksOut > 1) {
+      // Taper — 2 weeks out: ~50% volume reduction, intensity kept but shortened
+      if (type === 'rest') detail = 'Rest day. Recovery is training now — sleep and nutrition matter as much as any session.';
+      else if (type === 'easy') detail = `<strong>TAPER — 40 min Z2.</strong> HR under ${z2hr} bpm · ${z2w}W. About half your normal endurance volume — legs should feel fresher each day now.`;
+      else if (type === 'threshold') detail = `<strong>TAPER — 2×8 min at race pace.</strong> ${z4low}–${z4hiw}W est · ${z4lo}–${z4hi} bpm. Same intensity as always, just fewer reps. Full recovery between efforts.`;
+      else if (type === 'social') detail = `<strong>TAPER — 1–1.5 h easy social ride.</strong> Skip the hard climbing efforts this week — spin the legs, enjoy the company.`;
+      else if (type === 'fatigue') detail = `<strong>TAPER — 45 min easy then 2×6 min at race pace.</strong> ${z4low}–${z4hiw}W est. Keep the legs sharp without digging any fatigue hole — no more big efforts from here.`;
+      else if (type === 'long') detail = `<strong>TAPER — ${isUCI?'55–65 km, minimal climbing':'40–50 km'}.</strong> Roughly half your recent long-ride distance. Z2 pace throughout, practice your race nutrition timing one more time.`;
+    } else if (weeksOut !== null && weeksOut <= 3 && weeksOut > 2) {
+      // Sharpen phase — 3 weeks out
+      if (type === 'rest') detail = 'Rest day. Recovery is training. Sleep and nutrition are critical in the final weeks.';
+      else if (type === 'easy') detail = `<strong>SHARPEN — 75 min Z2.</strong> HR under ${z2hr} bpm · ${z2w}W. Reduce volume slightly but keep the quality.`;
+      else if (type === 'threshold') detail = `<strong>SHARPEN — 3×10 min race pace.</strong> Slightly shorter than base phase. ${z4low}–${z4hiw}W est · ${z4lo}–${z4hi} bpm. Focus on smooth, efficient effort.`;
+      else if (type === 'social') detail = `<strong>SHARPEN — 2 h social ride with purpose.</strong> Include one climb at race pace effort. Practice your race nutrition — eat every 25 min.`;
+      else if (type === 'fatigue') detail = `<strong>SHARPEN — Race simulation.</strong> 60 min easy then 2×15 min at race pace (${z4low}–${z4hiw}W). This is your last big fatigue effort before taper. Make it count.`;
+      else if (type === 'long') detail = `<strong>SHARPEN — Final long ride.</strong> ${isUCI?'100–110 km with 1,400–1,600 m climbing':'70–90 km'}. Ride the first half at Z2, second half at race pace. Practice your full race nutrition strategy.`;
+    } else if (weeksOut !== null && weeksOut <= 8 && weeksOut > 3) {
+      // Build phase — 4-8 weeks out
+      if (type === 'rest') detail = 'Rest day. Foam roll, stretch, good sleep. Build phase demands proper recovery.';
+      else if (type === 'easy') detail = `<strong>BUILD — 90 min Z2.</strong> HR under ${z2hr} bpm · ${z2w}W. Solid base work. 85–90 rpm.`;
+      else if (type === 'threshold') detail = `<strong>BUILD — 4×12 min threshold.</strong> Warm up 15 min. ${z4low}–${z4hiw}W · ${z4lo}–${z4hi} bpm. 5 min easy between. Building from 3 to 4 reps now.`;
+      else if (type === 'social') detail = `<strong>BUILD — 2.5–3 h social ride.</strong> Include 2 proper climbs. Push the pace on climbs — this is build phase, not base. Avg HR ${z2hr}–${z3hr} bpm.`;
+      else if (type === 'fatigue') detail = isUCI
+        ? `<strong>BUILD — Fatigue climbing.</strong> 60 min easy then 4×8 min hard climbing at ${z4lo}–${z4hi} bpm · ${z4low}–${z4hiw}W. Only 3 min recovery. One more rep than base phase.`
+        : `<strong>BUILD — 2.5 h interval ride.</strong> Warm up 45 min then 5×6 min at ${z4lo}–${z4hi} bpm. 4 min easy between.`;
+      else if (type === 'long') detail = `<strong>BUILD — Long ride with climbing.</strong> ${isUCI?'115–125 km, 1,600–1,900 m climbing':'90–110 km'}. ${isUCI?'Full Amy\u2019s course simulation — big climb early, flat recovery, second climb on tired legs. ':''}Eat every 25 min. This is your key session.`;
+    } else {
+      // Base phase — more than 8 weeks out
+      if (type === 'rest') detail = 'Full rest day. Stretch, foam roll. Non-negotiable recovery. Let the training absorb.';
+      else if (type === 'easy') detail = `<strong>BASE — ${i===1?'90':'60'} min Z2 endurance.</strong> HR under ${z2hr} bpm · ${z2w}W. Conversational pace, 85–90 rpm. Fan on if indoors.`;
+      else if (type === 'threshold') detail = `<strong>BASE — 3×12 min threshold intervals.</strong> Warm up 15 min. ${z4low}–${z4hiw}W · ${z4lo}–${z4hi} bpm. 70–75 rpm. 5 min easy between. Cool down 15 min.`;
+      else if (type === 'social') detail = `<strong>BASE — 2–3 h social/group ride.</strong> Include at least one real climb. Target avg HR ${z2hr}–${z3hr} bpm. Pre-loads fatigue for Saturday.`;
+      else if (type === 'fatigue') detail = isUCI
+        ? `<strong>BASE — 2 h fatigue climbing.</strong> 45–60 min easy then 3×8 min hard climbing at ${z4lo}–${z4hi} bpm · ${z4low}–${z4hiw}W. Only 3 min recovery. Must be outdoors.`
+        : `<strong>BASE — 2 h interval session.</strong> Warm up 45 min then 4×6 min at ${z4lo}–${z4hi} bpm. 4 min easy between.`;
+      else if (type === 'long') detail = `<strong>BASE — Long ride.</strong> Build toward ${isUCI?'110–120 km, 1,400–1,600 m climbing':'70–100 km'}. Z2 pace — HR under ${z2hr} bpm · ${z2w}W. ${isUCI?'Include a big climb and a second climb when tired. ':''}Eat every 25 min.`;
+    }
+
+    const dotColor = isRace ? 'var(--orange)' : DAY_COLORS[type] || 'var(--gravel)';
+    days.push(`<div class="tl-row${isToday?' ':''}" style="${isToday?'background:var(--orange-lo);border-radius:var(--r);padding:10px;margin:-2px 0;':''}">
+      <div class="tl-dot" style="background:${dotColor}"></div>
+      <div class="tl-date" style="width:110px">${dayName}</div>
+      <div class="tl-text">${detail}</div>
+    </div>`);
+  }
+
+  const weeksOutText = weeksOut !== null && weeksOut > 0 ? ` · <strong>${weeksOut} weeks to ${userProfile.goal_event||'race day'}</strong>` : weeksOut === 0 ? ' · <strong>Race week!</strong>' : '';
+  const boxColour = phase==='Base'?'green':phase==='Build'?'yellow':phase==='Sharpen'||phase==='Taper'?'orange':'orange';
+  document.getElementById('week-detail-content').innerHTML = `
+    <div class="box box-${boxColour}" style="margin-bottom:1rem">
+      <strong>${phase} phase</strong>${weeksOutText} · ${getPhaseDesc(phase)}
+    </div>
+    <div class="tl">${days.join('')}</div>
+  `;
+
+  // Swipe support
+  setupSwipe(document.getElementById('week-swipe'));
+}
+
+function getPhaseDesc(phase) {
+  const desc = {
+    'Base': 'Focus on aerobic base, long Z2 rides and building consistency.',
+    'Build': 'Adding threshold intervals and climbing-specific work.',
+    'Sharpen': 'Race simulation efforts and dialling in your pacing strategy.',
+    'Taper': 'Volume cut by roughly half, intensity kept but shortened. Legs should start feeling fresher.',
+    'Race Week': 'Volume cut by roughly 70%, just enough sharpness to stay ready. Trust your training.',
+    'Post-race': 'Recovery and reflection. Well done!'
+  };
+  return desc[phase] || '';
+}
+
+function setupSwipe(el) {
+  if (!el) return;
+  let startX = 0;
+  el.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, { passive:true });
+  el.addEventListener('touchend', e => {
+    const diff = startX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) weekNav(diff > 0 ? 1 : -1);
+  }, { passive:true });
+}
+
+// ── RIDE DETAIL ──
+async function openRide(activityId) {
+  document.getElementById('ride-modal').style.display = 'flex';
+  document.getElementById('modal-stats').innerHTML = '<p style="color:var(--mist);font-size:13px">Loading...</p>';
+
+  // Clear previous map
+  if (leafletMap) { leafletMap.remove(); leafletMap = null; }
+  document.getElementById('route-map').innerHTML = '';
+  document.getElementById('elev-section').style.display = 'none';
+  document.getElementById('hr-section').style.display = 'none';
+  document.getElementById('segments-section').style.display = 'none';
+  document.getElementById('streams-section').style.display = 'none';
+
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const authHeaders = { Authorization: 'Bearer ' + (session?.access_token || '') };
+
+    const [actRes, streamRes] = await Promise.all([
+      fetch('/api/strava?' + new URLSearchParams({ mode: 'activity', activity_id: activityId }), { headers: authHeaders }),
+      fetch('/api/strava?' + new URLSearchParams({ mode: 'streams', activity_id: activityId }), { headers: authHeaders })
+    ]);
+
+    const act = await actRes.json();
+    const streams = await streamRes.json();
+
+    // Store for coach
+    currentRideData = act;
+    currentRideStreams = streams;
+
+    // Header
+    document.getElementById('modal-title').textContent = act.name || 'Ride';
+    document.getElementById('modal-date').textContent = act.start_date_local
+      ? new Date(act.start_date_local).toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
+      : '';
+
+    // Stats
+    const km = act.distance ? (act.distance/1000).toFixed(1) : '—';
+    const elev = act.total_elevation_gain ? Math.round(act.total_elevation_gain)+'m' : '—';
+    const mins = act.moving_time ? Math.round(act.moving_time/60) : 0;
+    const duration = mins >= 60 ? Math.floor(mins/60)+'h '+(mins%60)+'m' : mins+'m';
+    const avgHR = act.average_heartrate ? Math.round(act.average_heartrate)+' bpm' : '—';
+    const maxHR = act.max_heartrate ? Math.round(act.max_heartrate)+' bpm' : '—';
+    const avgWatts = act.average_watts ? Math.round(act.average_watts)+'W' : '—';
+    const prs = act.pr_count || 0;
+
+    document.getElementById('modal-stats').innerHTML = [
+      { val: km+' km', lbl: 'Distance' },
+      { val: duration, lbl: 'Moving time' },
+      { val: elev, lbl: 'Elevation' },
+      { val: avgHR, lbl: 'Avg HR' },
+      { val: maxHR, lbl: 'Max HR' },
+      { val: avgWatts, lbl: 'Avg power' },
+      { val: prs > 0 ? prs+' PRs' : '—', lbl: 'PRs' },
+      { val: act.suffer_score || '—', lbl: 'Suffer score' },
+    ].map(s => `<div class="modal-stat"><div class="val" style="font-size:16px">${s.val}</div><div class="lbl">${s.lbl}</div></div>`).join('');
+
+    // Route map using Leaflet + Strava polyline
+    if (act.map?.summary_polyline) {
+      leafletMap = L.map('route-map', { zoomControl:false, attributionControl:false });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution:'© OpenStreetMap'
+      }).addTo(leafletMap);
+      const decoded = decodePolyline(act.map.summary_polyline);
+      const polyline = L.polyline(decoded, { color: '#FC4C02', weight: 3 }).addTo(leafletMap);
+      leafletMap.fitBounds(polyline.getBounds(), { padding: [10,10] });
+      L.control.attribution({ prefix:false }).addTo(leafletMap);
+    } else {
+      document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">No route data available</div>';
+    }
+
+    // Elevation profile from streams
+    if (streams.altitude?.data) {
+      document.getElementById('elev-section').style.display = 'block';
+      drawElevation(streams.altitude.data);
+    }
+
+    // HR zones from streams
+    if (streams.heartrate?.data && userProfile) {
+      const hrData = streams.heartrate.data;
+      const maxHRest = userProfile.ftp ? Math.round(userProfile.ftp/1.22) : 176;
+      const zones = [
+        { name:'Z1', color:'#4CAF7D', max: maxHRest*0.60 },
+        { name:'Z2', color:'#2D9B6A', max: maxHRest*0.72 },
+        { name:'Z3', color:'#E8C30A', max: maxHRest*0.83 },
+        { name:'Z4', color:'#E8A20A', max: maxHRest*0.95 },
+        { name:'Z5+', color:'#E84040', max: 999 }
+      ];
+      const counts = [0,0,0,0,0];
+      hrData.forEach(hr => {
+        for (let i=0;i<zones.length;i++) { if(hr<=zones[i].max){counts[i]++;break;} }
+      });
+      const total = hrData.length || 1;
+      document.getElementById('elev-section').style.display = 'block';
+      document.getElementById('hr-section').style.display = 'block';
+      document.getElementById('hr-zones-bar').innerHTML = zones.map((z,i) =>
+        `<div style="flex:${counts[i]};background:${z.color};min-width:${counts[i]>0?'2px':'0'}"></div>`
+      ).join('');
+      document.getElementById('hr-zones-legend').innerHTML = zones.map((z,i) =>
+        `<span style="color:${z.color}">${z.name}: ${Math.round(counts[i]/total*100)}%</span>`
+      ).join(' · ');
+    }
+
+    // Segments
+    if (act.segment_efforts?.length) {
+      document.getElementById('segments-section').style.display = 'block';
+      const segs = act.segment_efforts.slice(0,10);
+      document.getElementById('segments-list').innerHTML = segs.map(s => {
+        const t = s.moving_time;
+        const time = t>=60?Math.floor(t/60)+'m '+(t%60)+'s':t+'s';
+        const isPR = s.pr_rank === 1;
+        const isTop = s.kom_rank === 1;
+        return `<div class="segment-row">
+          <div class="seg-name">${s.name}</div>
+          <div class="seg-time">${time}</div>
+          ${isPR?'<div class="seg-pr">🏆 PR</div>':isTop?'<div class="seg-pr">👑 KOM</div>':''}
+        </div>`;
+      }).join('');
+    }
+
+    // Streams stats (speed, cadence, power, temp)
+    const streamStats = [];
+    if (streams.velocity_smooth?.data) {
+      const speeds = streams.velocity_smooth.data.filter(v=>v>0);
+      const avg = speeds.reduce((a,b)=>a+b,0)/speeds.length;
+      const max = Math.max(...speeds);
+      streamStats.push({ val: (avg*3.6).toFixed(1)+' km/h', lbl: 'Avg speed' });
+      streamStats.push({ val: (max*3.6).toFixed(1)+' km/h', lbl: 'Max speed' });
+    }
+    if (streams.cadence?.data) {
+      const cads = streams.cadence.data.filter(c=>c>0);
+      streamStats.push({ val: Math.round(cads.reduce((a,b)=>a+b,0)/cads.length)+' rpm', lbl: 'Avg cadence' });
+    }
+    if (streams.watts?.data) {
+      const watts = streams.watts.data.filter(w=>w>0);
+      streamStats.push({ val: Math.round(watts.reduce((a,b)=>a+b,0)/watts.length)+'W', lbl: 'Avg power' });
+      streamStats.push({ val: Math.round(Math.max(...watts))+'W', lbl: 'Max power' });
+    }
+    if (streams.temp?.data) {
+      const temps = streams.temp.data;
+      streamStats.push({ val: Math.round(temps.reduce((a,b)=>a+b,0)/temps.length)+'°C', lbl: 'Avg temp' });
+    }
+    // Always show streams section if we have any data (especially for indoor/roller rides)
+    if (streamStats.length || act.average_cadence || act.average_watts) {
+      // Add summary stats if streams not available but activity has them
+      if (!streamStats.length) {
+        if (act.average_speed) streamStats.push({ val: (act.average_speed*3.6).toFixed(1)+' km/h', lbl: 'Avg speed' });
+        if (act.average_cadence) streamStats.push({ val: Math.round(act.average_cadence)+' rpm', lbl: 'Avg cadence' });
+        if (act.average_watts) streamStats.push({ val: Math.round(act.average_watts)+'W', lbl: 'Avg power' });
+        if (act.weighted_average_watts) streamStats.push({ val: Math.round(act.weighted_average_watts)+'W', lbl: 'Norm power' });
+      }
+      document.getElementById('streams-section').style.display = 'block';
+      document.getElementById('streams-stats').innerHTML = streamStats.map(s =>
+        `<div class="modal-stat"><div class="val" style="font-size:16px">${s.val}</div><div class="lbl">${s.lbl}</div></div>`
+      ).join('');
+    }
+
+  } catch(e) {
+    document.getElementById('modal-stats').innerHTML = `<p style="color:#FF8585;font-size:13px">Error loading ride: ${e.message}</p>`;
+  }
+}
+
+function askCoachAboutRide() {
+  if (!currentRideData) return;
+
+  const act = currentRideData;
+  const streams = currentRideStreams || {};
+  const km = act.distance ? (act.distance/1000).toFixed(1) : '?';
+  const elev = act.total_elevation_gain ? Math.round(act.total_elevation_gain) : '?';
+  const mins = act.moving_time ? Math.round(act.moving_time/60) : 0;
+  const duration = mins >= 60 ? Math.floor(mins/60)+'h '+(mins%60)+'m' : mins+'m';
+  const date = act.start_date_local ? new Date(act.start_date_local).toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'}) : 'unknown date';
+
+  // Build HR zone breakdown
+  let hrZoneText = '';
+  if (streams.heartrate?.data && userProfile?.ftp) {
+    const hrData = streams.heartrate.data;
+    const maxHRest = Math.round(userProfile.ftp/1.22);
+    const hrZones = [
+      { name:'Z1 Recovery', max: maxHRest*0.60 },
+      { name:'Z2 Endurance', max: maxHRest*0.72 },
+      { name:'Z3 Tempo', max: maxHRest*0.83 },
+      { name:'Z4 Threshold', max: maxHRest*0.95 },
+      { name:'Z5+ VO2max', max: 999 }
+    ];
+    const hrCounts = [0,0,0,0,0];
+    hrData.forEach(hr => {
+      for (let i=0;i<hrZones.length;i++) { if(hr<=hrZones[i].max){hrCounts[i]++;break;} }
+    });
+    const hrTotal = hrData.length || 1;
+    hrZoneText = '\nHR Zone breakdown:\n' + hrZones.map((z,i) =>
+      '  ' + z.name + ': ' + Math.round(hrCounts[i]/hrTotal*100) + '% (' + hrCounts[i] + ' data points)'
+    ).join('\n');
+  }
+
+    // Elevation profile summary
+  let elevText = '';
+  if (streams.altitude?.data) {
+    const alt = streams.altitude.data;
+    const min = Math.min(...alt), max = Math.max(...alt);
+    elevText = `
+Elevation: min ${Math.round(min)}m, max ${Math.round(max)}m, total gain ${elev}m`;
+  }
+
+  // Speed/cadence/power summary
+  let streamText = '';
+  if (streams.velocity_smooth?.data) {
+    const speeds = streams.velocity_smooth.data.filter(v=>v>0);
+    const avgSpeed = speeds.reduce((a,b)=>a+b,0)/speeds.length;
+    const maxSpeed = Math.max(...speeds);
+    streamText += `
+Avg speed: ${(avgSpeed*3.6).toFixed(1)} km/h, Max speed: ${(maxSpeed*3.6).toFixed(1)} km/h`;
+  }
+  if (streams.cadence?.data) {
+    const cads = streams.cadence.data.filter(c=>c>0);
+    const avgCad = Math.round(cads.reduce((a,b)=>a+b,0)/cads.length);
+    streamText += `
+Avg cadence: ${avgCad} rpm`;
+  }
+  if (streams.watts?.data) {
+    const watts = streams.watts.data.filter(w=>w>0);
+    const avgW = Math.round(watts.reduce((a,b)=>a+b,0)/watts.length);
+    const maxW = Math.round(Math.max(...watts));
+    const normalised = Math.round(Math.sqrt(Math.sqrt(watts.reduce((s,w)=>s+Math.pow(w,4),0)/watts.length)));
+    streamText += `
+Avg power: ${avgW}W, Max power: ${maxW}W, Normalised power: ${normalised}W`;
+  }
+  if (streams.temp?.data) {
+    const temps = streams.temp.data;
+    const avgTemp = Math.round(temps.reduce((a,b)=>a+b,0)/temps.length);
+    streamText += `
+Avg temperature: ${avgTemp}°C`;
+  }
+
+  // Segments
+  let segText = '';
+  if (act.segment_efforts?.length) {
+    segText = "\nSegment efforts:\n" + act.segment_efforts.slice(0,10).map(s => {
+      const t = s.moving_time;
+      const time = t>=60?Math.floor(t/60)+'m '+(t%60)+'s':t+'s';
+      const pr = s.pr_rank===1?' (PR!)' : s.kom_rank===1?' (KOM!)' : s.pr_rank?` (${s.pr_rank}${s.pr_rank===2?'nd':s.pr_rank===3?'rd':'th'} best)` : '';
+      return '  ' + s.name + ': ' + time + pr;
+    }).join("\n");
+  }
+
+  // Build full ride context for coach
+  const rideContext = `DETAILED RIDE ANALYSIS REQUEST:
+Ride: ${act.name} on ${date}
+Distance: ${km} km | Duration: ${duration} | Elevation: ${elev}m
+Avg HR: ${act.average_heartrate?Math.round(act.average_heartrate)+' bpm':'unknown'} | Max HR: ${act.max_heartrate?Math.round(act.max_heartrate)+' bpm':'unknown'}
+Avg power: ${act.average_watts?Math.round(act.average_watts)+'W':'unknown'} | Suffer score: ${act.suffer_score||'unknown'}
+PRs: ${act.pr_count||0}
+${hrZoneText}${elevText}${streamText}${segText}`;
+
+  // Store as current ride context
+  window.CURRENT_RIDE_CONTEXT = rideContext;
+
+  // Close modal and open coach
+  document.getElementById('ride-modal').style.display = 'none';
+  if (leafletMap) { leafletMap.remove(); leafletMap = null; }
+
+  // Switch to coach tab
+  const coachTab = document.querySelectorAll('.nav-tab')[6];
+  show('coach', coachTab);
+
+  // Send to coach
+  document.getElementById('cinput').value = 'Please analyse this ride for me and tell me what it means for my training.';
+  send();
+}
+
+function drawElevation(altData) {
+  const canvas = document.getElementById('elev-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+  canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  const w = canvas.offsetWidth, h = canvas.offsetHeight;
+  const min = Math.min(...altData), max = Math.max(...altData);
+  const range = max - min || 1;
+  ctx.clearRect(0,0,w,h);
+  ctx.beginPath();
+  ctx.moveTo(0, h);
+  altData.forEach((alt, i) => {
+    const x = (i / (altData.length-1)) * w;
+    const y = h - ((alt - min) / range) * (h * 0.85);
+    i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.lineTo(w, h);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0,0,0,h);
+  grad.addColorStop(0, 'rgba(232,80,10,0.8)');
+  grad.addColorStop(1, 'rgba(232,80,10,0.1)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.strokeStyle = '#E8500A';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  altData.forEach((alt, i) => {
+    const x = (i / (altData.length-1)) * w;
+    const y = h - ((alt - min) / range) * (h * 0.85);
+    i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+}
+
+function decodePolyline(encoded) {
+  const points = [];
+  let index = 0, lat = 0, lng = 0;
+  while (index < encoded.length) {
+    let b, shift = 0, result = 0;
+    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+    shift = 0; result = 0;
+    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+    points.push([lat/1e5, lng/1e5]);
+  }
+  return points;
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('ride-modal')) {
+    document.getElementById('ride-modal').style.display = 'none';
+    if (leafletMap) { leafletMap.remove(); leafletMap = null; }
+  }
+}
+
+// Calendar init handled in show()
+
+function renderRides(rides) {
+  const cycling = rides.filter(r => r.type === 'Ride' || r.sport_type === 'Ride' || r.type === 'VirtualRide' || r.sport_type === 'VirtualRide').slice(0,20);
+  if (!cycling.length) return;
+  const list = document.getElementById('rides-list');
+  list.innerHTML = cycling.map(r => {
+    const km = (r.distance/1000).toFixed(1);
+    const mins = Math.round(r.moving_time/60);
+    const duration = mins >= 60 ? Math.floor(mins/60)+'h '+(mins%60)+'m' : mins+'m';
+    const date = new Date(r.start_date_local).toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
+    const isIndoor = r.distance === 0 || r.trainer === true || r.type === 'VirtualRide' || r.sport_type === 'VirtualRide';
+    const isLong = r.distance > 80000;
+    return `<div class="ride-row" onclick="openRide(${r.id})" style="cursor:pointer">
+      <div class="rdot" style="background:${isIndoor?'var(--mist)':isLong?'var(--orange)':'var(--green)'}"></div>
+      <div class="rinfo">
+        <div class="rname">${r.name}${isIndoor?'<span class="tag to">indoor</span>':''}${isLong?'<span class="tag tg">long</span>':''}</div>
+        <div class="rmeta">${date}${isIndoor?' · indoor roller':' · '+km+' km · '+Math.round(r.total_elevation_gain)+'m'}${r.average_heartrate?' · avg '+Math.round(r.average_heartrate)+' bpm':''}${r.pr_count>0?' · '+r.pr_count+' PRs':''} <span style="color:var(--orange);font-size:10px">tap for details →</span></div>
+      </div>
+      <div class="rstat">
+        <div class="big">${isIndoor?mins+' min':duration}</div>
+        <div class="sm">${r.average_heartrate?'avg '+Math.round(r.average_heartrate)+' bpm':''}</div>
+      </div>
+    </div>`;
+  }).join('');
+  const note = document.getElementById('rides-note');
+  note.style.display = 'block';
+  note.innerHTML = '<strong>Tap any ride</strong> for full details — elevation profile, HR zones, segments, speed, cadence, power and route map.';
+
+  // Build enhanced coach data from last 4 weeks
+  const fourWeeksAgo = new Date();
+  fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+  const recent = cycling.filter(r => new Date(r.start_date_local) > fourWeeksAgo);
+  
+  liveRides = buildCoachData(cycling, recent);
+}
+
+function buildCoachData(allRides, recent) {
+  const isIndoorRide = r => r.distance === 0 || r.trainer === true || r.type === 'VirtualRide' || r.sport_type === 'VirtualRide';
+  const outdoor = recent.filter(r => !isIndoorRide(r) && r.distance > 0);
+  const indoor = recent.filter(r => isIndoorRide(r));
+  const allRiding = recent; // includes both indoor and outdoor
+
+  // Total time includes ALL rides (indoor + outdoor)
+  const totalTime = allRiding.reduce((s,r)=>s+r.moving_time,0);
+  const totalTimeHours = (totalTime/3600).toFixed(1);
+  const avgWeeklyHours = (totalTime / 3600 / 4).toFixed(1); // over 4 weeks
+
+  // Outdoor-only metrics
+  const totalDist = outdoor.reduce((s,r)=>s+r.distance,0);
+  const totalElev = outdoor.reduce((s,r)=>s+r.total_elevation_gain,0);
+  const outdoorTime = outdoor.reduce((s,r)=>s+r.moving_time,0);
+  const indoorTime = indoor.reduce((s,r)=>s+r.moving_time,0);
+
+  const avgHRrides = allRiding.filter(r=>r.average_heartrate);
+  const avgHR = avgHRrides.length ? Math.round(avgHRrides.reduce((s,r)=>s+r.average_heartrate,0)/avgHRrides.length) : 0;
+  const maxHRall = Math.max(...allRiding.filter(r=>r.max_heartrate).map(r=>r.max_heartrate), 0);
+  const prCount = outdoor.reduce((s,r)=>s+(r.pr_count||0),0);
+  const longestRide = outdoor.length ? outdoor.reduce((a,b)=>a.distance>b.distance?a:b) : null;
+  const mostClimbing = outdoor.length ? outdoor.reduce((a,b)=>a.total_elevation_gain>b.total_elevation_gain?a:b) : null;
+
+  const indoorSummary = indoor.length ? 'Indoor/roller sessions: ' + indoor.length + ' in last 4 weeks (' + Math.round(indoorTime/3600) + 'h ' + Math.round((indoorTime%3600)/60) + 'min total). ' +
+    indoor.slice(0,5).map(r => {
+      const date = new Date(r.start_date_local).toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short'});
+      const mins = Math.round(r.moving_time/60);
+      return date + ': ' + mins + 'min' +
+        (r.average_heartrate?' avg '+Math.round(r.average_heartrate)+'bpm':'') +
+        (r.average_cadence?' cadence '+Math.round(r.average_cadence)+'rpm':'') +
+        (r.average_watts?' avg '+Math.round(r.average_watts)+'W':'');
+    }).join(', ') : 'No indoor sessions recorded in last 4 weeks.';
+
+  const recentList = allRiding.slice(0,10).map(r => {
+    const date = new Date(r.start_date_local).toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'short'});
+    const mins = Math.round(r.moving_time/60);
+    const isIndoor = isIndoorRide(r);
+    if (isIndoor) {
+      return date + ': INDOOR roller ' + mins + 'min' +
+        (r.average_heartrate?', avg '+Math.round(r.average_heartrate)+'bpm':'') +
+        (r.average_cadence?', cadence '+Math.round(r.average_cadence)+'rpm':'') +
+        (r.average_watts?', avg '+Math.round(r.average_watts)+'W':'');
+    }
+    const km = (r.distance/1000).toFixed(1);
+    return date + ': ' + km + 'km, ' + Math.round(r.total_elevation_gain) + 'm elev, ' +
+      Math.floor(mins/60) + 'h' + (mins%60) + 'm' +
+      (r.average_heartrate?', avg '+Math.round(r.average_heartrate)+'bpm':'') +
+      (r.average_watts?', avg '+Math.round(r.average_watts)+'W':'') +
+      (r.pr_count>0?', '+r.pr_count+' PRs':'');
+  }).join('\n');
+
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return `
+
+LAST 4 WEEKS STRAVA ANALYSIS (all dates in local time: ${tz}):
+Total training time (ALL rides inc. indoor): ${Math.floor(totalTime/3600)}h ${Math.round((totalTime%3600)/60)}m over 4 weeks
+Average weekly training hours (actual from Strava): ${avgWeeklyHours}h/week
+Outdoor riding time: ${Math.floor(outdoorTime/3600)}h ${Math.round((outdoorTime%3600)/60)}m
+Indoor/roller time: ${Math.floor(indoorTime/3600)}h ${Math.round((indoorTime%3600)/60)}m
+Total outdoor distance: ${(totalDist/1000).toFixed(0)} km
+Total elevation: ${Math.round(totalElev)} m
+Total sessions: ${allRiding.length} (${outdoor.length} outdoor + ${indoor.length} indoor)
+Average HR across all rides: ${avgHR || 'unknown'} bpm
+Max HR recorded: ${maxHRall || 'unknown'} bpm
+Total PRs set: ${prCount}
+${longestRide ? 'Longest ride: ' + (longestRide.distance/1000).toFixed(0) + 'km, ' + Math.round(longestRide.total_elevation_gain) + 'm elev' : ''}
+${mostClimbing ? 'Most climbing: ' + Math.round(mostClimbing.total_elevation_gain) + 'm in ' + (mostClimbing.distance/1000).toFixed(0) + 'km' : ''}
+${indoorSummary}
+
+NOTE: Use actual Strava hours (${avgWeeklyHours}h/week) for training load advice, not the profile target of ${userProfile?.hours_per_week||'unknown'}h/week.
+
+ALL RECENT RIDES (newest first, indoor and outdoor):
+${recentList}`;
+}
+</script>
+<!-- RIDE DETAIL MODAL -->
+<div id="ride-modal" class="modal-overlay" style="display:none" onclick="closeModal(event)">
+  <div class="modal" id="ride-modal-content">
+    <div class="modal-header">
+      <div style="flex:1">
+        <div class="modal-title" id="modal-title">Ride details</div>
+        <div style="font-size:12px;color:var(--mist);margin-top:3px" id="modal-date"></div>
+        <button onclick="askCoachAboutRide()" style="margin-top:8px;background:var(--orange);border:none;border-radius:var(--r);color:#fff;font-size:12px;font-weight:700;padding:6px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:5px">🚴 Ask coach</button>
+      </div>
+      <button class="modal-close" onclick="document.getElementById('ride-modal').style.display='none'">×</button>
+    </div>
+    <div class="modal-stats" id="modal-stats"></div>
+    <div id="route-map"></div>
+    <div id="elev-section" style="display:none">
+      <p class="slabel">Elevation profile</p>
+      <canvas id="elev-canvas" style="width:100%;height:80px;border-radius:var(--r);background:var(--gravel)"></canvas>
+    </div>
+    <div id="hr-section" style="display:none;margin-top:1rem">
+      <p class="slabel">Heart rate zones</p>
+      <div class="hr-zones-bar" id="hr-zones-bar"></div>
+      <div id="hr-zones-legend" style="display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--mist);margin-top:4px"></div>
+    </div>
+    <div id="segments-section" style="display:none;margin-top:1rem">
+      <p class="slabel">Segments</p>
+      <div id="segments-list"></div>
+    </div>
+    <div id="streams-section" style="display:none;margin-top:1rem">
+      <p class="slabel">Speed · Cadence · Power · Temperature</p>
+      <div id="streams-stats" class="modal-stats"></div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
