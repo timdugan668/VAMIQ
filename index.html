@@ -1672,8 +1672,9 @@ function buildSystemPrompt() {
   const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const userUTCOffset = -(new Date().getTimezoneOffset()/60);
   const userUTCOffsetStr = (userUTCOffset >= 0 ? '+' : '') + userUTCOffset;
-  const todayStr = new Date().toISOString().slice(0,10);
-  const todayDay = new Date().toLocaleDateString('en-AU', { weekday: 'long' });
+  const now = new Date();
+  const todayStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+  const todayDay = now.toLocaleDateString('en-AU', { weekday: 'long' });
 
   const rideContext = window.CURRENT_RIDE_CONTEXT ? ("\n\n" + window.CURRENT_RIDE_CONTEXT) : "";
 
