@@ -1676,6 +1676,20 @@ function buildSystemPrompt() {
   const todayStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
   const todayDay = now.toLocaleDateString('en-AU', { weekday: 'long' });
 
+  // Pre-computed date lookup table — the coach should NEVER calculate which
+  // weekday a date falls on itself (LLMs are error-prone at this). It reads
+  // the answer directly from here instead.
+  const upcomingDaysTable = [];
+  for (let i = 0; i < 35; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+    const dStr = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const wd = d.toLocaleDateString('en-AU', { weekday: 'long' });
+    const defaultType = getTrainingType(d);
+    const ov = scheduleOverrides[dStr];
+    const overrideNote = ov ? ` — CURRENTLY ADJUSTED: "${ov.title}"` : '';
+    upcomingDaysTable.push(`${dStr} = ${wd}, normal session type: ${defaultType}${overrideNote}`);
+  }
+
   const rideContext = window.CURRENT_RIDE_CONTEXT ? ("\n\n" + window.CURRENT_RIDE_CONTEXT) : "";
 
   return `You are VAMIQ, an expert AI cycling coach. You adapt to every athlete's individual goals and data.
@@ -1720,6 +1734,9 @@ TIMEZONE NOTE: Athlete timezone is \${userTimezone} (UTC offset \${userUTCOffset
 
 TODAY: ${todayStr} (${todayDay}), in the athlete's local time.
 
+DATE LOOKUP TABLE (next 35 days) — use this directly. Do NOT calculate which weekday a date falls on yourself, and do NOT calculate dates from day names yourself — always look them up here:
+${upcomingDaysTable.join('\n')}
+
 CHANGING THE ATHLETE'S CALENDAR:
 If the athlete asks you to change one or more days' sessions (e.g. "make Saturday easier", "swap Tuesday for rest", "I'm sick this week", "I'm travelling next week and can't train properly"), you can propose concrete changes to their actual calendar — one day or many. Do NOT apply changes silently — always briefly confirm in plain conversational text what you're proposing and why, THEN append one machine-readable block per changed day in EXACTLY this format, with no other text inside each block:
 
@@ -1729,6 +1746,7 @@ Rules:
 - Only emit blocks when the athlete has clearly asked for a specific, concrete calendar change — not for general questions or advice.
 - Use the athlete's actual calendar dates (calculate from TODAY above), not vague day names alone.
 - MULTI-DAY CHANGES: for scenarios spanning several days (illness, travel, injury, work trip, etc.), propose one block per affected day, covering the FULL affected period, not just the first day. The athlete will see a "Confirm all" option as well as individual confirm buttons.
+- WEEKDAY ROLE CONSISTENCY: when applying a phase change (e.g. "make these days Sharpen phase") across a date range, each date keeps its own normal session type from the DATE LOOKUP TABLE (e.g. the date whose normal type is "long" gets that phase's long-ride content, not another day's content) — do not shift session types onto the wrong dates. Only assign a different session type than a date's normal one if the athlete explicitly asked to change what kind of session happens that day.
 - GOAL RISK: before proposing any change, think about whether it meaningfully affects the athlete's readiness for their goal event — e.g. losing key Build-phase sessions, missing the last big fatigue-climb before taper, or being sick during a critical week. If so: (a) say so plainly in your conversational reply — do not downplay or hide it, (b) include the risk_note field on the relevant day(s) explaining the specific risk, and (c) where sensible, suggest how the rest of the plan should adapt to compensate (e.g. extending Build phase by a few days, adjusting expectations for race day, or prioritising which missed sessions matter most). Minor changes (e.g. swapping one easy day for another easy day) do not need a risk_note — reserve it for genuine risk to the goal.
 - Place all blocks at the very end of your reply, after your conversational explanation.
 - The athlete will see a Confirm button and must approve before anything is actually changed — so it's safe to propose. Say so naturally in your reply (e.g. "I've set that up below — hit confirm if that works for you").
