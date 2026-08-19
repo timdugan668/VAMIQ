@@ -51,7 +51,7 @@ export default async function handler(req, res) {
     }
 
     const upsertRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/schedule_overrides`,
+      `${SUPABASE_URL}/rest/v1/schedule_overrides?on_conflict=user_id,date`,
       {
         method: 'POST',
         headers: {
