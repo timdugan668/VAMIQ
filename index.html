@@ -1334,7 +1334,9 @@ async function syncStrava() {
       showSyncError('No rides found in Strava — make sure your activities are set to public or followers.');
     } else {
       btn.textContent = '↻ Sync'; btn.disabled = false;
-      showSyncError('Unexpected response from Strava. Try again or reconnect in Profile.');
+      // Show what we actually got to help debug
+      const preview = JSON.stringify(data).substring(0, 200);
+      showSyncError('Unexpected Strava response: ' + preview + ' — Try reconnecting Strava in Profile.');
     }
   } catch(e) {
     btn.textContent = '↻ Sync'; btn.disabled = false;
