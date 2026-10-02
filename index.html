@@ -454,7 +454,7 @@ select:focus { border-color:var(--orange); }
         <svg width="11" height="11" viewBox="0 0 24 24" fill="white"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
         Live
       </div>
-      <button class="sync-btn" id="sync-btn" onclick="syncStrava()">↻ Sync</button>
+      <button class="sync-btn" id="sync-btn" onclick="userProfile?.wahoo_access_token ? syncWahoo() : syncStrava()">↻ Sync</button>
       <button class="user-btn" id="user-btn" onclick="showUserMenu()">👤</button>
     </div>
   </header>
@@ -617,18 +617,17 @@ select:focus { border-color:var(--orange); }
     <div class="field-hint success" id="profile-saved" style="margin-top:0.75rem;display:none;text-align:center">✓ Profile saved!</div>
 
     <div style="margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid var(--gravel)">
-      <p class="slabel">Strava connection</p>
-      <div id="strava-profile-status" class="box box-green" style="display:none">
-        <strong>✓ Strava connected</strong><br>
-        <span style="font-size:12px">Your rides sync automatically. <button onclick="reconnectStrava()" style="background:none;border:none;color:#85DBA8;font-size:12px;cursor:pointer;text-decoration:underline;padding:0">Reconnect</button> if sync stops working.</span>
+      <p class="slabel">Wahoo connection</p>
+      <div id="wahoo-profile-status" class="box box-green" style="display:none">
+        <strong>✓ Wahoo connected</strong><br>
+        <span style="font-size:12px">Your rides sync automatically. <button onclick="connectWahoo()" style="background:none;border:none;color:#85DBA8;font-size:12px;cursor:pointer;text-decoration:underline;padding:0">Reconnect</button> if sync stops working.</span>
       </div>
-      <div id="strava-profile-disconnected" class="box box-orange" style="display:none">
-        <strong>⚠️ Strava not connected</strong><br>
-        <span style="font-size:12px">Connect Strava to sync your rides and get personalised coaching.</span>
+      <div id="wahoo-profile-disconnected" class="box box-orange" style="display:none">
+        <strong>⚠️ Wahoo not connected</strong><br>
+        <span style="font-size:12px">Connect Wahoo to sync your rides and get personalised coaching.</span>
       </div>
-      <button id="strava-connect-btn" onclick="reconnectStrava()" class="strava-connect" style="margin-top:0.75rem;display:none">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
-        Connect Strava
+      <button id="wahoo-connect-btn" onclick="connectWahoo()" style="margin-top:0.75rem;display:none;width:100%;background:#E8500A;color:#fff;border:none;border-radius:8px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+        🚴 Connect Wahoo
       </button>
     </div>
 
@@ -1043,7 +1042,47 @@ async function initApp() {
     showSyncError('Strava connection failed: ' + window.STRAVA_ERROR);
     window.STRAVA_ERROR = null;
   }
-  if (userProfile?.strava_access_token) syncStrava();
+
+  // Save pending Wahoo tokens
+  if (window.PENDING_WAHOO && currentUser) {
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      const authToken = session?.access_token;
+      const r = await fetch(
+        'https://cjonjfzpqtjpvrabjkla.supabase.co/rest/v1/profiles?id=eq.' + currentUser.id,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqb25qZnpwcXRqcHZyYWJqa2xhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxODg1MTIsImV4cCI6MjA5OTc2NDUxMn0.XVhLA6zk3TN1Q8fkp92iqcT41xrffZi5m-Ekj9uuyDc',
+            'Authorization': 'Bearer ' + authToken,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({
+            wahoo_access_token: window.PENDING_WAHOO.access_token,
+            wahoo_refresh_token: window.PENDING_WAHOO.refresh_token,
+            updated_at: new Date().toISOString()
+          })
+        }
+      );
+      if (r.ok) {
+        userProfile.wahoo_access_token = window.PENDING_WAHOO.access_token;
+        userProfile.wahoo_refresh_token = window.PENDING_WAHOO.refresh_token;
+        window.PENDING_WAHOO = null;
+        syncWahoo();
+        alert('Wahoo connected! Syncing your rides...');
+      }
+    } catch(e) {
+      console.log('Wahoo token save error:', e.message);
+    }
+  }
+
+  if (window.WAHOO_ERROR) {
+    showSyncError('Wahoo connection failed: ' + window.WAHOO_ERROR);
+    window.WAHOO_ERROR = null;
+  }
+  if (userProfile?.wahoo_access_token) syncWahoo();
+  else if (userProfile?.strava_access_token) syncStrava();
   if (userProfile?.name) {
     document.getElementById('app-sub').textContent = `Welcome back, ${userProfile.name}`;
   }
@@ -1251,11 +1290,14 @@ function loadProfileTab() {
   if (!userProfile) return;
   const p = userProfile;
 
-  // Show Strava connection status
-  const isConnected = !!p.strava_access_token;
-  document.getElementById('strava-profile-status').style.display = isConnected ? 'block' : 'none';
-  document.getElementById('strava-profile-disconnected').style.display = isConnected ? 'none' : 'block';
-  document.getElementById('strava-connect-btn').style.display = isConnected ? 'none' : 'flex';
+  // Show Wahoo connection status
+  const isWahooConnected = !!p.wahoo_access_token;
+  const wahooStatus = document.getElementById('wahoo-profile-status');
+  const wahooDisc = document.getElementById('wahoo-profile-disconnected');
+  const wahooBtn = document.getElementById('wahoo-connect-btn');
+  if (wahooStatus) wahooStatus.style.display = isWahooConnected ? 'block' : 'none';
+  if (wahooDisc) wahooDisc.style.display = isWahooConnected ? 'none' : 'block';
+  if (wahooBtn) wahooBtn.style.display = isWahooConnected ? 'none' : 'flex';
 
   // Show account email
   const emailEl = document.getElementById('profile-email');
@@ -1370,6 +1412,172 @@ function show(id, btn) {
 }
 
 // ── STRAVA ──
+async function syncWahoo() {
+  if (!userProfile?.wahoo_access_token) return;
+  const btn = document.getElementById('sync-btn');
+  btn.textContent = '↻ Syncing...';
+  btn.disabled = true;
+  try {
+    const params = new URLSearchParams({
+      access_token: userProfile.wahoo_access_token,
+      refresh_token: userProfile.wahoo_refresh_token || ''
+    });
+    const r = await fetch('/api/wahoo?' + params);
+    const data = await r.json();
+
+    if (data.errors || data.error) {
+      showSyncError('Wahoo error: ' + (data.error_description || data.error || JSON.stringify(data.errors)));
+      btn.textContent = '↻ Sync'; btn.disabled = false;
+      return;
+    }
+
+    // Wahoo returns workouts array
+    const workouts = data.workouts || data || [];
+    if (Array.isArray(workouts) && workouts.length > 0) {
+      renderWahooRides(workouts);
+      updateDashboardFromWahoo(workouts);
+      document.getElementById('strava-pill').style.display = 'flex';
+      btn.textContent = '✓ Synced';
+      hideSyncError();
+      setTimeout(() => { btn.textContent = '↻ Sync'; btn.disabled = false; }, 3000);
+    } else {
+      btn.textContent = '↻ Sync'; btn.disabled = false;
+      showSyncError('No Wahoo workouts found. Make sure you have rides in the Wahoo app.');
+    }
+  } catch(e) {
+    btn.textContent = '↻ Sync'; btn.disabled = false;
+    showSyncError('Connection error: ' + e.message);
+  }
+}
+
+function renderWahooRides(workouts) {
+  const rides = workouts.filter(w => w.workout_type_family_name === 'CYCLING' || w.workout_type?.name?.includes('Cycling') || w.workout_type?.name?.includes('cycling')).slice(0, 20);
+  if (!rides.length) {
+    document.getElementById('rides-list').innerHTML = '<p style="color:var(--mist);font-size:13px">No cycling workouts found in Wahoo.</p>';
+    return;
+  }
+  const list = document.getElementById('rides-list');
+  list.innerHTML = rides.map(r => {
+    const summary = r.workout_summary || {};
+    const km = summary.distance_accum ? (summary.distance_accum / 1000).toFixed(1) : '—';
+    const elev = summary.ascent_accum ? Math.round(summary.ascent_accum) : 0;
+    const mins = summary.duration_active_accum ? Math.round(summary.duration_active_accum / 60) : 0;
+    const duration = mins >= 60 ? Math.floor(mins/60)+'h '+(mins%60)+'m' : mins+'m';
+    const date = r.created_at ? new Date(r.created_at).toLocaleDateString('en-AU', {weekday:'short',day:'numeric',month:'short'}) : '—';
+    const avgHR = summary.heart_rate_avg ? Math.round(summary.heart_rate_avg) : 0;
+    const avgPower = summary.power_bike_avg ? Math.round(summary.power_bike_avg) : 0;
+    const isLong = (summary.distance_accum || 0) > 80000;
+    return `<div class="ride-row" onclick="openWahooRide('${r.id}')" style="cursor:pointer">
+      <div class="rdot" style="background:${isLong?'var(--orange)':'var(--green)'}"></div>
+      <div class="rinfo">
+        <div class="rname">${r.name || 'Cycling workout'}${isLong?'<span class="tag tg">long</span>':''}</div>
+        <div class="rmeta">${date} · ${km} km${elev?' · '+elev+'m':''} <span style="color:var(--orange);font-size:10px">tap for details →</span></div>
+      </div>
+      <div class="rstat">
+        <div class="big">${duration}</div>
+        <div class="sm">${avgHR?'avg '+avgHR+' bpm':''}${avgPower?' · '+avgPower+'W':''}</div>
+      </div>
+    </div>`;
+  }).join('');
+  const note = document.getElementById('rides-note');
+  note.style.display = 'block';
+  note.innerHTML = '<strong>Tap any ride</strong> for full details and to ask the coach about it.';
+  liveRides = buildWahooCoachData(rides);
+}
+
+function buildWahooCoachData(rides) {
+  const recent = rides.slice(0, 10);
+  const totalDist = recent.reduce((s,r) => s + (r.workout_summary?.distance_accum || 0), 0);
+  const totalTime = recent.reduce((s,r) => s + (r.workout_summary?.duration_active_accum || 0), 0);
+  const avgWeeklyHours = (totalTime / 3600 / 4).toFixed(1);
+
+  const rideList = recent.map(r => {
+    const s = r.workout_summary || {};
+    const date = r.created_at ? new Date(r.created_at).toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'short'}) : '?';
+    const km = s.distance_accum ? (s.distance_accum/1000).toFixed(1) : '?';
+    const mins = s.duration_active_accum ? Math.round(s.duration_active_accum/60) : 0;
+    const elev = s.ascent_accum ? Math.round(s.ascent_accum) : 0;
+    const hr = s.heart_rate_avg ? Math.round(s.heart_rate_avg) : 0;
+    const power = s.power_bike_avg ? Math.round(s.power_bike_avg) : 0;
+    const cad = s.cadence_avg ? Math.round(s.cadence_avg) : 0;
+    return `${date}: ${km}km, ${elev}m elev, ${Math.floor(mins/60)}h${mins%60}m${hr?', avg '+hr+'bpm':''}${power?', avg '+power+'W':''}${cad?', cadence '+cad+'rpm':''}`;
+  }).join('\n');
+
+  return `
+
+LAST 4 WEEKS WAHOO WORKOUTS:
+Total distance: ${(totalDist/1000).toFixed(0)} km
+Avg weekly hours: ${avgWeeklyHours}h
+Sessions: ${recent.length}
+
+RECENT RIDES (newest first):
+${rideList}`;
+}
+
+function updateDashboardFromWahoo(workouts) {
+  const rides = workouts.filter(w => w.workout_type_family_name === 'CYCLING' || w.workout_type?.name?.includes('ycling'));
+  if (!rides.length) return;
+  const weight = userProfile?.weight || 84;
+
+  // Last ride
+  const last = rides[0];
+  const s = last.workout_summary || {};
+  const mins = s.duration_active_accum ? Math.round(s.duration_active_accum/60) : 0;
+  const km = s.distance_accum ? (s.distance_accum/1000).toFixed(0) : '?';
+  const date = last.created_at ? new Date(last.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short'}) : '';
+  document.getElementById('d-last').textContent = Math.floor(mins/60)+'h '+(mins%60)+'m';
+  document.getElementById('d-last-sub').textContent = km+' km · '+date;
+
+  // Best long ride
+  const longRides = rides.filter(r => (r.workout_summary?.distance_accum || 0) > 50000);
+  if (longRides.length) {
+    const best = longRides.reduce((a,b) => (a.workout_summary?.distance_accum||0) > (b.workout_summary?.distance_accum||0) ? a : b);
+    const bMins = best.workout_summary?.duration_active_accum ? Math.round(best.workout_summary.duration_active_accum/60) : 0;
+    const bKm = best.workout_summary?.distance_accum ? (best.workout_summary.distance_accum/1000).toFixed(0) : '?';
+    const bElev = best.workout_summary?.ascent_accum ? Math.round(best.workout_summary.ascent_accum) : 0;
+    document.getElementById('d-best').textContent = Math.floor(bMins/60)+'h '+(bMins%60)+'m';
+    document.getElementById('d-best-sub').textContent = bKm+' km · '+bElev+'m elev';
+  }
+
+  // FTP from profile or power data
+  const ftp = userProfile?.ftp || 0;
+  if (ftp) {
+    document.getElementById('d-ftp').textContent = '~'+ftp+' W';
+    document.getElementById('d-ftp-sub').textContent = 'From your profile';
+    document.getElementById('d-wkg').textContent = (ftp/weight).toFixed(2);
+    updateZones();
+  } else {
+    // Try to estimate from avg power
+    const powerRides = longRides.filter(r => r.workout_summary?.power_bike_avg > 0);
+    if (powerRides.length) {
+      const best = powerRides.reduce((a,b) => (a.workout_summary?.power_bike_avg||0) > (b.workout_summary?.power_bike_avg||0) ? a : b);
+      const hrs = (best.workout_summary?.duration_active_accum||0) / 3600;
+      const factor = hrs < 2 ? 0.92 : hrs < 3 ? 0.85 : hrs < 4 ? 0.80 : 0.77;
+      const estFTP = Math.round(best.workout_summary.power_bike_avg / factor);
+      document.getElementById('d-ftp').textContent = '~'+estFTP+' W';
+      document.getElementById('d-ftp-sub').textContent = 'Est. from best power ride';
+      document.getElementById('d-wkg').textContent = (estFTP/weight).toFixed(2);
+      userProfile = { ...userProfile, ftp: estFTP };
+      updateZones();
+    }
+  }
+
+  // Summary box
+  document.getElementById('d-summary').innerHTML = `<strong>Wahoo synced.</strong> ${date}: ${km}km, ${Math.floor(mins/60)}h${mins%60}min${s.heart_rate_avg?', avg '+Math.round(s.heart_rate_avg)+'bpm':''}${s.power_bike_avg?', avg '+Math.round(s.power_bike_avg)+'W':''}. Keep building toward your goal!`;
+}
+
+function openWahooRide(id) {
+  // Show basic modal for Wahoo ride
+  document.getElementById('ride-modal').style.display = 'flex';
+  document.getElementById('modal-title').textContent = 'Wahoo ride';
+  document.getElementById('modal-stats').innerHTML = '<p style="color:var(--mist);font-size:13px">Full Wahoo ride detail coming soon. Ask the coach about this ride below.</p>';
+  document.getElementById('route-map').innerHTML = '';
+  document.getElementById('elev-section').style.display = 'none';
+  document.getElementById('hr-section').style.display = 'none';
+  document.getElementById('segments-section').style.display = 'none';
+  document.getElementById('streams-section').style.display = 'none';
+}
+
 async function syncStrava() {
   if (!userProfile?.strava_access_token) {
     showSyncError('No Strava account connected. Go to Profile to connect Strava.');
