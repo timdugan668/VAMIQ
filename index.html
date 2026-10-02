@@ -974,7 +974,7 @@ async function completeOnboarding(stravaData) {
 }
 
 // ── APP ──
-function initApp() {
+async function initApp() {
   updateCountdowns();
   updateGoalDisplay();
   updateWeeklyPlan();
@@ -983,6 +983,53 @@ function initApp() {
   if (new Date('2026-09-13') < new Date() && userProfile?.goal_type === 'uci_qualifier') {
     const banner = document.getElementById('d-qualified-banner');
     if (banner) banner.style.display = 'block';
+  }
+
+  // Save pending Strava tokens if returning from OAuth callback
+  if (window.PENDING_STRAVA && currentUser) {
+    try {
+      console.log('Saving Strava tokens for user:', currentUser.id);
+      // Use direct REST call to update just the token fields
+      const { data: { session } } = await sb.auth.getSession();
+      const authToken = session?.access_token;
+      const r = await fetch(
+        'https://cjonjfzpqtjpvrabjkla.supabase.co/rest/v1/profiles?id=eq.' + currentUser.id,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqb25qZnpwcXRqcHZyYWJqa2xhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxODg1MTIsImV4cCI6MjA5OTc2NDUxMn0.XVhLA6zk3TN1Q8fkp92iqcT41xrffZi5m-Ekj9uuyDc',
+            'Authorization': 'Bearer ' + authToken,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({
+            strava_access_token: window.PENDING_STRAVA.access_token,
+            strava_refresh_token: window.PENDING_STRAVA.refresh_token,
+            updated_at: new Date().toISOString()
+          })
+        }
+      );
+      console.log('Strava token save status:', r.status);
+      if (r.ok) {
+        userProfile.strava_access_token = window.PENDING_STRAVA.access_token;
+        userProfile.strava_refresh_token = window.PENDING_STRAVA.refresh_token;
+        window.PENDING_STRAVA = null;
+        document.getElementById('strava-pill').style.display = 'flex';
+        alert('Strava connected successfully! Click Sync to load your rides.');
+      } else {
+        const err = await r.text();
+        alert('Failed to save Strava token: ' + err);
+      }
+    } catch(e) {
+      console.log('Failed to save Strava tokens:', e.message);
+      alert('Error saving Strava tokens: ' + e.message);
+    }
+  }
+
+  // Show Strava error if any
+  if (window.STRAVA_ERROR) {
+    showSyncError('Strava connection failed: ' + window.STRAVA_ERROR);
+    window.STRAVA_ERROR = null;
   }
   if (userProfile?.strava_access_token) syncStrava();
   if (userProfile?.name) {
