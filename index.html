@@ -1873,12 +1873,14 @@ function addMsg(role, text) {
   // Check for VAMIQ_PLAN_UPDATE block
   let planUpdate = null;
   let displayText = text;
-  const planMatch = text.match(/VAMIQ_PLAN_UPDATE:(\{[^}]+\})/);
-  if (planMatch) {
+  const planIdx = text.indexOf('VAMIQ_PLAN_UPDATE:');
+  if (planIdx !== -1) {
     try {
-      planUpdate = JSON.parse(planMatch[1]);
-      displayText = text.replace(/VAMIQ_PLAN_UPDATE:\{[^}]+\}/, '').trim();
-    } catch(e) {}
+      const jsonStr = text.slice(planIdx + 'VAMIQ_PLAN_UPDATE:'.length).trim();
+      const jsonEnd = jsonStr.indexOf('}') + 1;
+      planUpdate = JSON.parse(jsonStr.slice(0, jsonEnd));
+      displayText = text.slice(0, planIdx).trim();
+    } catch(e) { console.log('Plan parse error:', e); }
   }
 
   const formatted = displayText.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
