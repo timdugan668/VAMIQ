@@ -857,8 +857,23 @@ async function loadProfile() {
 }
 
 async function saveProfile(profile) {
-  const { error } = await sb.from('profiles').upsert({ id: currentUser.id, ...profile, updated_at: new Date().toISOString() });
-  if (!error) userProfile = { id: currentUser.id, ...profile };
+  try {
+    console.log('Saving profile for user:', currentUser.id, profile);
+    const payload = { id: currentUser.id, ...profile, updated_at: new Date().toISOString() };
+    const { data, error } = await sb
+      .from('profiles')
+      .upsert(payload, { onConflict: 'id' })
+      .select();
+    console.log('Save result:', JSON.stringify(data), 'Error:', JSON.stringify(error));
+    if (error) {
+      alert('Profile save error: ' + error.message + ' (code: ' + error.code + ')');
+    } else {
+      userProfile = { id: currentUser.id, ...profile };
+    }
+  } catch(e) {
+    console.log('saveProfile exception:', e.message);
+    alert('Profile save failed: ' + e.message);
+  }
 }
 
 // ── ONBOARDING ──
