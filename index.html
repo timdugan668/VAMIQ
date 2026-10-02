@@ -1856,6 +1856,35 @@ async function send() {
 
     chatHistory.push({ role:'assistant', content:fullReply });
     window.CURRENT_RIDE_CONTEXT = null; // clear after successful send
+
+    // Process VAMIQ_PLAN_UPDATE after streaming completes
+    const planIdx = fullReply.indexOf('VAMIQ_PLAN_UPDATE:');
+    if (planIdx !== -1) {
+      try {
+        const jsonStr = fullReply.slice(planIdx + 'VAMIQ_PLAN_UPDATE:'.length).trim();
+        const jsonEnd = jsonStr.indexOf('}') + 1;
+        const planUpdate = JSON.parse(jsonStr.slice(0, jsonEnd));
+        window.pendingPlanUpdate = planUpdate;
+        const displayText = fullReply.slice(0, planIdx).trim();
+
+        // Update bubble with clean text + confirm buttons
+        const planPreview = Object.entries(planUpdate).map(([day, session]) =>
+          '<div style="display:flex;gap:8px;font-size:12px;padding:3px 0;border-bottom:1px solid #2E3029"><span style="width:30px;text-transform:capitalize;color:var(--mist)">' + day + '</span><span>' + session + '</span></div>'
+        ).join('');
+
+        bubbleEl.innerHTML = displayText.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>') +
+          '<div class="plan-confirm" style="margin-top:0.75rem">' +
+          '<strong>📅 Apply these changes to your calendar?</strong>' +
+          '<div style="margin:8px 0">' + planPreview + '</div>' +
+          '<div class="plan-confirm-btns">' +
+          '<button class="plan-accept" onclick="applyCoachPlan(this)">✓ Apply to my calendar</button>' +
+          '<button class="plan-reject" onclick="this.closest(\'.plan-confirm\').remove()">✕ Keep current</button>' +
+          '</div></div>';
+
+        const msgs = document.getElementById('chat-msgs');
+        msgs.scrollTop = msgs.scrollHeight;
+      } catch(e) { console.log('Plan parse error:', e); }
+    }
   } catch(e) {
     t.remove();
     addMsg('coach', '⚠️ '+e.message);
