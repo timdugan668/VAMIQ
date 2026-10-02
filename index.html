@@ -1084,10 +1084,11 @@ async function initApp() {
     window.WAHOO_ERROR = null;
   }
   if (userProfile?.wahoo_access_token) syncWahoo();
-  else if (userProfile?.strava_access_token) syncStrava();
   if (userProfile?.name) {
-    document.getElementById('app-sub').textContent = `Welcome back, ${userProfile.name}`;
+    document.getElementById('app-sub').textContent = 'Welcome back, ' + userProfile.name;
   }
+  // Clear any stale Strava errors
+  hideSyncError();
 }
 
 function updateCountdowns() {
