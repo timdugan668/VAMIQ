@@ -194,6 +194,10 @@ select:focus { border-color:var(--orange); }
 .cinput:focus{border-color:var(--orange)}
 .sbtn{background:var(--orange);color:#fff;border:none;border-radius:var(--r);padding:10px 18px;font-size:14px;font-weight:700;cursor:pointer;align-self:flex-end}
 .sbtn:disabled{opacity:0.4;cursor:not-allowed}
+.plan-confirm{background:var(--green-lo);border:1px solid #1A4A30;border-radius:var(--r);padding:0.85rem 1rem;margin-top:0.5rem;font-size:13px}
+.plan-confirm-btns{display:flex;gap:8px;margin-top:0.75rem}
+.plan-accept{background:var(--green);color:#fff;border:none;border-radius:var(--r);padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer}
+.plan-reject{background:var(--gravel);color:var(--fog);border:1px solid #3E4239;border-radius:var(--r);padding:8px 16px;font-size:13px;cursor:pointer}
 
 /* Goal panel */
 .goal-banner { background:var(--orange-lo); border:1px solid #5A2010; border-radius:var(--r); padding:1rem; margin-bottom:1.25rem; }
@@ -1744,7 +1748,11 @@ function buildSystemPrompt() {
 
   const rideContext = window.CURRENT_RIDE_CONTEXT ? ("\n\n" + window.CURRENT_RIDE_CONTEXT) : "";
 
-  return `You are VAMIQ, an expert AI cycling coach. You adapt to every athlete's individual goals and data.
+  return `You are VAMIQ, the built-in AI cycling coach inside the VAMIQ app. You ARE the VAMIQ coaching system — there is no separate VAMIQ team or support team. You and VAMIQ are the same thing.
+
+CRITICAL — CALENDAR: The VAMIQ app has a built-in Calendar tab that AUTOMATICALLY updates every week based on the athlete's goal date and training phase. You do NOT need to update any calendar — it already updates itself. When athletes ask about their training plan or calendar, tell them to CHECK THE CALENDAR TAB in VAMIQ — it already has their full adaptive plan. Never say you cannot update the calendar, never suggest contacting a VAMIQ team, never say you are separate from VAMIQ. You ARE VAMIQ.
+
+You are an expert AI cycling coach. You adapt to every athlete's individual goals and data.
 
 ATHLETE PROFILE:
 - Name: ${p.name||'the athlete'}
@@ -1783,7 +1791,7 @@ You MUST prescribe sessions appropriate to the current phase. Never give base-ph
 
 TIMEZONE NOTE: Athlete timezone is \${userTimezone} (UTC offset \${userUTCOffset}). Strava activity dates provided use start_date_local which is already in the athlete's local time. Do NOT adjust dates — treat all dates and days as-is in the athlete's local time.
 
-IMPORTANT: The athlete's goal description above is the most important context. Read it carefully and tailor ALL coaching advice specifically to what they have described. If they mention a specific event, date, qualification standard or performance target, focus your coaching on that. Be specific, practical and encouraging. Australian casual tone. Concise but actionable.
+IMPORTANT: The athlete's goal description above is the most important context. When giving training advice, ALWAYS structure recommendations as specific daily sessions (Mon: rest, Tue: 90min Z2, Wed: 3x12min threshold intervals, etc.) so the athlete can apply them to their calendar. After giving a weekly plan, end with: "Want me to apply this to your VAMIQ calendar?" The VAMIQ calendar tab already shows an auto-generated plan — when you suggest changes the athlete can tap Apply to update it. Read it carefully and tailor ALL coaching advice specifically to what they have described. If they mention a specific event, date, qualification standard or performance target, focus your coaching on that. Be specific, practical and encouraging. Australian casual tone. Concise but actionable.
 
 CALENDAR & TRAINING PLAN: VAMIQ has a built-in training calendar that automatically adapts week by week based on the athlete's goal date and phase (Base, Build, Sharpen, Taper). You DO NOT need to push sessions to any external calendar — tell the athlete to check the Calendar tab in VAMIQ for their full week-by-week plan. When asked about training plans, describe the sessions clearly and tell them their VAMIQ calendar already has it mapped out. Never say you cannot update the calendar — the VAMIQ calendar updates automatically.` + rideContext;
 }
@@ -1857,9 +1865,59 @@ function addMsg(role, text) {
   const c = document.getElementById('chat-msgs');
   const d = document.createElement('div');
   d.className = 'msg '+role;
-  d.innerHTML = `<div class="mav">${role==='coach'?'🚴':'👤'}</div><div class="mbub">${text.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')}</div>`;
+
+  // Check for VAMIQ_PLAN_UPDATE block
+  let planUpdate = null;
+  let displayText = text;
+  const planMatch = text.match(/VAMIQ_PLAN_UPDATE:(\{[^}]+\})/);
+  if (planMatch) {
+    try {
+      planUpdate = JSON.parse(planMatch[1]);
+      displayText = text.replace(/VAMIQ_PLAN_UPDATE:\{[^}]+\}/, '').trim();
+    } catch(e) {}
+  }
+
+  const formatted = displayText.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+
+  let confirmHtml = '';
+  if (planUpdate && role === 'coach') {
+    const planPreview = Object.entries(planUpdate).map(([day, session]) =>
+      `<div style="display:flex;gap:8px;font-size:12px;padding:3px 0;border-bottom:1px solid #2E3029"><span style="width:30px;text-transform:capitalize;color:var(--mist)">${day}</span><span>${session}</span></div>`
+    ).join('');
+    confirmHtml = `<div class="plan-confirm" style="margin-top:0.75rem">
+      <strong>📅 Proposed plan changes:</strong>
+      <div style="margin:8px 0">${planPreview}</div>
+      <div class="plan-confirm-btns">
+        <button class="plan-accept" onclick="applyCoachPlan(this, ${JSON.stringify(planUpdate).replace(/"/g,'&quot;')})">✓ Apply to my calendar</button>
+        <button class="plan-reject" onclick="this.closest('.plan-confirm').remove()">✕ Keep current</button>
+      </div>
+    </div>`;
+  }
+
+  d.innerHTML = '<div class="mav">' + (role==='coach'?'🚴':'👤') + '</div><div class="mbub">' + formatted + confirmHtml + '</div>';
   c.appendChild(d); c.scrollTop = c.scrollHeight;
   return d;
+}
+
+function applyCoachPlan(btn, planJson) {
+  const confirmDiv = btn.closest('.plan-confirm');
+  confirmDiv.innerHTML = '✅ <strong>Plan applied!</strong> Check the Calendar tab to see your updated training week.';
+  confirmDiv.style.background = 'var(--green-lo)';
+  confirmDiv.style.border = '1px solid #1A4A30';
+
+  // Store the coach plan override
+  if (planJson) {
+    try {
+      const plan = typeof planJson === 'string' ? JSON.parse(planJson) : planJson;
+      window.coachPlanOverride = plan;
+    } catch(e) {}
+  }
+
+  // Switch to calendar/week tab
+  const weekTab = Array.from(document.querySelectorAll('.nav-tab')).find(t => t.textContent.trim() === 'This week');
+  if (weekTab) {
+    setTimeout(() => { show('week', weekTab); }, 1200);
+  }
 }
 
 function addTyping() {
