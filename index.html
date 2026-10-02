@@ -841,14 +841,13 @@ async function signUp() {
 async function loadProfile() {
   try {
     console.log('Loading profile for user:', currentUser.id);
-    const { data, error } = await sb.from('profiles').select('*').eq('id', currentUser.id).single();
-    console.log('Profile data:', data, 'Error:', error);
-    if (data && !error) {
-      userProfile = data;
+    const { data, error } = await sb.from('profiles').select('*').eq('id', currentUser.id).limit(1);
+    console.log('Profile result:', JSON.stringify(data), 'Error:', JSON.stringify(error));
+    if (!error && data && data.length > 0) {
+      userProfile = data[0];
       showScreen('app');
     } else {
-      console.log('No profile found, showing onboarding. Error:', JSON.stringify(error));
-      // Try upsert with minimal data to create profile if missing
+      console.log('No profile found - going to onboarding');
       showScreen('onboarding');
     }
   } catch (e) {
