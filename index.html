@@ -840,14 +840,19 @@ async function signUp() {
 // ── PROFILE ──
 async function loadProfile() {
   try {
+    console.log('Loading profile for user:', currentUser.id);
     const { data, error } = await sb.from('profiles').select('*').eq('id', currentUser.id).single();
+    console.log('Profile data:', data, 'Error:', error);
     if (data && !error) {
       userProfile = data;
       showScreen('app');
     } else {
+      console.log('No profile found, showing onboarding. Error:', JSON.stringify(error));
+      // Try upsert with minimal data to create profile if missing
       showScreen('onboarding');
     }
   } catch (e) {
+    console.log('loadProfile exception:', e.message);
     showScreen('onboarding');
   }
 }
