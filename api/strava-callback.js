@@ -10,7 +10,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const r = await fetch('https://www.strava.com/oauth/token', {
+    // Exchange code for tokens
+    const tokenRes = await fetch('https://www.strava.com/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -21,16 +22,17 @@ export default async function handler(req, res) {
       })
     });
 
-    const data = await r.json();
+    const tokenData = await tokenRes.json();
 
-    if (!data.access_token) {
-      return res.redirect('/?strava_error=' + encodeURIComponent(JSON.stringify(data.errors || data.message || 'token_failed')));
+    if (!tokenData.access_token) {
+      return res.redirect('/?strava_error=' + encodeURIComponent(JSON.stringify(tokenData.message || 'token_failed')));
     }
 
+    // Return tokens to app via URL params for saving to Supabase
     const params = new URLSearchParams({
-      strava_access_token: data.access_token,
-      strava_refresh_token: data.refresh_token,
-      strava_athlete: data.athlete?.firstname || ''
+      strava_access_token: tokenData.access_token,
+      strava_refresh_token: tokenData.refresh_token || '',
+      strava_ok: '1'
     });
 
     return res.redirect('/?' + params.toString());
