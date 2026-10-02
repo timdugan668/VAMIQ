@@ -622,13 +622,15 @@ select:focus { border-color:var(--orange); }
         <strong>✓ Wahoo connected</strong><br>
         <span style="font-size:12px">Your rides sync automatically. <button onclick="connectWahoo()" style="background:none;border:none;color:#85DBA8;font-size:12px;cursor:pointer;text-decoration:underline;padding:0">Reconnect</button> if sync stops working.</span>
       </div>
-      <div id="wahoo-profile-disconnected" class="box box-orange" style="display:none">
-        <strong>⚠️ Wahoo not connected</strong><br>
-        <span style="font-size:12px">Connect Wahoo to sync your rides and get personalised coaching.</span>
+      <div id="wahoo-profile-disconnected" style="display:none">
+        <div class="box box-orange" style="margin-bottom:0.75rem">
+          <strong>⚠️ Wahoo not connected</strong><br>
+          <span style="font-size:12px">Connect Wahoo to sync your rides and get personalised coaching.</span>
+        </div>
+        <button id="wahoo-connect-btn" onclick="connectWahoo()" style="width:100%;background:#E8500A;color:#fff;border:none;border-radius:8px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;">
+          🚴 Connect Wahoo
+        </button>
       </div>
-      <button id="wahoo-connect-btn" onclick="connectWahoo()" style="margin-top:0.75rem;display:none;width:100%;background:#E8500A;color:#fff;border:none;border-radius:8px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
-        🚴 Connect Wahoo
-      </button>
     </div>
 
     <div style="margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid var(--gravel)">
@@ -1294,10 +1296,8 @@ function loadProfileTab() {
   const isWahooConnected = !!p.wahoo_access_token;
   const wahooStatus = document.getElementById('wahoo-profile-status');
   const wahooDisc = document.getElementById('wahoo-profile-disconnected');
-  const wahooBtn = document.getElementById('wahoo-connect-btn');
   if (wahooStatus) wahooStatus.style.display = isWahooConnected ? 'block' : 'none';
   if (wahooDisc) wahooDisc.style.display = isWahooConnected ? 'none' : 'block';
-  if (wahooBtn) wahooBtn.style.display = isWahooConnected ? 'none' : 'flex';
 
   // Show account email
   const emailEl = document.getElementById('profile-email');
