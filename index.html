@@ -988,8 +988,7 @@ async function initApp() {
   // Save pending Strava tokens if returning from OAuth callback
   if (window.PENDING_STRAVA && currentUser) {
     try {
-      console.log('Saving Strava tokens for user:', currentUser.id);
-      // Use direct REST call to update just the token fields
+      console.log('Saving Strava tokens, user:', currentUser.id);
       const { data: { session } } = await sb.auth.getSession();
       const authToken = session?.access_token;
       const r = await fetch(
@@ -1009,20 +1008,33 @@ async function initApp() {
           })
         }
       );
-      console.log('Strava token save status:', r.status);
+      console.log('Token PATCH status:', r.status);
       if (r.ok) {
         userProfile.strava_access_token = window.PENDING_STRAVA.access_token;
         userProfile.strava_refresh_token = window.PENDING_STRAVA.refresh_token;
         window.PENDING_STRAVA = null;
         document.getElementById('strava-pill').style.display = 'flex';
-        alert('Strava connected successfully! Click Sync to load your rides.');
+        // Auto-sync immediately
+        syncStrava();
+        alert('Strava connected! Syncing your rides...');
       } else {
         const err = await r.text();
-        alert('Failed to save Strava token: ' + err);
+        console.log('PATCH error:', err);
+        // Fallback: save to memory and sync anyway
+        userProfile.strava_access_token = window.PENDING_STRAVA.access_token;
+        userProfile.strava_refresh_token = window.PENDING_STRAVA.refresh_token;
+        window.PENDING_STRAVA = null;
+        syncStrava();
       }
     } catch(e) {
-      console.log('Failed to save Strava tokens:', e.message);
-      alert('Error saving Strava tokens: ' + e.message);
+      console.log('Strava token save error:', e.message);
+      // Still try to use the tokens in memory
+      if (window.PENDING_STRAVA) {
+        userProfile.strava_access_token = window.PENDING_STRAVA.access_token;
+        userProfile.strava_refresh_token = window.PENDING_STRAVA.refresh_token;
+        window.PENDING_STRAVA = null;
+        syncStrava();
+      }
     }
   }
 
