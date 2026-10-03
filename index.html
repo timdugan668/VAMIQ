@@ -1144,13 +1144,7 @@ function updateGoalDisplay() {
   `;
 
   // Update target time card
-  if (userProfile.goal_type === 'uci_qualifier') {
-    document.getElementById('d-target').textContent = '4h 30m';
-    document.getElementById('d-target-sub').textContent = 'Top 25% qualifier target';
-  } else if (userProfile.goal_type === 'gran_fondo') {
-    document.getElementById('d-target').textContent = 'Finish';
-    document.getElementById('d-target-sub').textContent = 'Strong completion';
-  }
+  updateTargetCard(userProfile);
 }
 
 function updateTargetCard(profile) {
