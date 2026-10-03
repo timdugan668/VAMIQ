@@ -1950,6 +1950,34 @@ function addMsg(role, text) {
 function applyCoachPlan(btn) {
   const confirmDiv = btn.closest('.plan-confirm');
   const plan = window.pendingPlanUpdate;
+  const events = window.pendingEventsUpdate || null;
+
+  // Events-only case (no plan update)
+  if (!plan && events) {
+    confirmDiv.innerHTML = '✅ <strong>Events added to your calendar!</strong>';
+    confirmDiv.style.background = 'var(--green-lo)';
+    confirmDiv.style.border = '1px solid #1A4A30';
+    window.coachEvents = events;
+    window.pendingEventsUpdate = null;
+    userProfile.target_events = events;
+    renderCalendar();
+    if (currentUser) {
+      sb.auth.getSession().then(({ data: { session } }) => {
+        fetch('https://cjonjfzpqtjpvrabjkla.supabase.co/rest/v1/profiles?id=eq.' + currentUser.id, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqb25qZnpwcXRqcHZyYWJqa2xhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxODg1MTIsImV4cCI6MjA5OTc2NDUxMn0.XVhLA6zk3TN1Q8fkp92iqcT41xrffZi5m-Ekj9uuyDc',
+            'Authorization': 'Bearer ' + session?.access_token,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({ target_events: events, updated_at: new Date().toISOString() })
+        }).then(r => console.log('Events saved to Supabase:', r.status));
+      });
+    }
+    return;
+  }
+
   if (!plan) return;
 
   // Map day names to display labels
@@ -1994,7 +2022,6 @@ function applyCoachPlan(btn) {
   confirmDiv.style.border = '1px solid #1A4A30';
 
   // Save to Supabase so it persists
-  const events = window.pendingEventsUpdate || null;
   if (currentUser) {
     sb.auth.getSession().then(({ data: { session } }) => {
       const patchData = { weekly_plan: plan, updated_at: new Date().toISOString() };
