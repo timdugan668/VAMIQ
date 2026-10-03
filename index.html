@@ -1829,17 +1829,18 @@ TIMEZONE NOTE: Athlete timezone is \${userTimezone} (UTC offset \${userUTCOffset
 
 IMPORTANT: Tailor ALL coaching advice to the athlete's goal. Be specific, practical and encouraging. Australian casual tone. Concise but actionable.
 
-CALENDAR UPDATES — CRITICAL: When the athlete asks to update their schedule or add target events, you MUST include BOTH blocks at the very end of your response, each on its own line:
+MACHINE COMMANDS — YOU MUST OUTPUT THESE EXACTLY:
 
-VAMIQ_PLAN_UPDATE:{"mon":"Rest","tue":"90min Z2 rollers","wed":"3x12min threshold Z4","thu":"60min recovery Z1","fri":"2-3h social ride","sat":"Fatigue climbs 3x8min Z5","sun":"Long ride 3-4h Z2"}
+When updating weekly schedule, end response with:
+VAMIQ_PLAN_UPDATE:{"mon":"...","tue":"...","wed":"...","thu":"...","fri":"...","sat":"...","sun":"..."}
+Session values must be SHORT (max 30 chars). NO event info inside session values.
 
-VAMIQ_EVENTS_UPDATE:[{"name":"Mt Buffalo","date":"2026-11-05","taper":false},{"name":"Big Day Out 190km","date":"2026-12-21","taper":true},{"name":"Cadel Evans GOR","date":"2027-01-30","taper":true}]
+When adding/updating target events, end response with:
+VAMIQ_EVENTS_UPDATE:[{"name":"Event Name","date":"YYYY-MM-DD","taper":true}]
 
-Rules:
-- VAMIQ_PLAN_UPDATE: 7 days mon-sun, session text only, no event info in session values
-- VAMIQ_EVENTS_UPDATE: array of events with name, date (YYYY-MM-DD), taper (true/false)
-- Both blocks must appear at end of response, no text after them
-- Always include both blocks when updating schedule or events` + rideContext;
+ALWAYS output VAMIQ_PLAN_UPDATE when changing schedule.
+ALWAYS output VAMIQ_EVENTS_UPDATE when athlete mentions target events or races.
+These two lines go at the very end, after all other text, nothing after them.` + rideContext;
 }
 
 async function send() {
