@@ -1968,13 +1968,17 @@ function applyCoachPlan(btn) {
     weekContent.innerHTML = weekHtml + existing.slice(existing.indexOf('</div>') + 6);
   }
 
-  // Store override so it persists on tab switch
+  // Store override and re-render everything
   window.coachPlanOverride = plan;
+  window.pendingPlanUpdate = null;
+
+  // Force re-render calendar and weekly plan
+  updateWeeklyPlan();
+  renderCalendar();
 
   confirmDiv.innerHTML = '✅ <strong>Plan applied!</strong> Switching to your calendar...';
   confirmDiv.style.background = 'var(--green-lo)';
   confirmDiv.style.border = '1px solid #1A4A30';
-  window.pendingPlanUpdate = null;
 
   // Save to Supabase so it persists
   if (currentUser) {
