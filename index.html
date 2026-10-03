@@ -230,6 +230,7 @@ select:focus { border-color:var(--orange); }
 .cal-day.fatigue { background:#1E0A00; color:var(--orange-hi); }
 .cal-day.long { background:#200800; color:var(--orange); }
 .cal-day.race { background:var(--orange-lo); color:var(--orange-hi); border:1px solid #5A2010; }
+.cal-day.taper { background:#1A1040; color:#9B7FE8; border:1px solid #3A2060; }
 .cal-day.today { outline:2px solid var(--orange); outline-offset:1px; }
 .cal-day.past { opacity:0.4; }
 
@@ -2208,7 +2209,7 @@ function renderCalendar() {
       const isRace = userProfile?.goal_date && date.toDateString() === new Date(userProfile.goal_date).toDateString();
       const dateStr = date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0') + '-' + String(date.getDate()).padStart(2,'0');
       const isEvent = (window.coachEvents || []).some(e => e.date === dateStr);
-      if (isEvent) console.log('Event match found:', dateStr);
+      if (isEvent) console.log('Event match found:', dateStr, 'cls will be:', isRace ? 'race' : 'race(event)');
       const eventObj = (window.coachEvents || []).find(e => e.date === dateStr);
       const isTaperStart = (window.coachEvents || []).some(e => {
         if (!e.taper) return false;
