@@ -2208,6 +2208,7 @@ function renderCalendar() {
       const isRace = userProfile?.goal_date && date.toDateString() === new Date(userProfile.goal_date).toDateString();
       const dateStr = date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0') + '-' + String(date.getDate()).padStart(2,'0');
       const isEvent = (window.coachEvents || []).some(e => e.date === dateStr);
+      if (isEvent) console.log('Event match found:', dateStr);
       const eventObj = (window.coachEvents || []).find(e => e.date === dateStr);
       const isTaperStart = (window.coachEvents || []).some(e => {
         if (!e.taper) return false;
