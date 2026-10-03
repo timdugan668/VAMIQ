@@ -2170,6 +2170,7 @@ function calNext() {
 }
 
 function renderCalendar() {
+  console.log('renderCalendar called, coachEvents:', JSON.stringify(window.coachEvents));
   const grid = document.getElementById('cal-months-grid');
   const today = new Date();
   const months = [];
