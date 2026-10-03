@@ -1928,38 +1928,8 @@ function addMsg(role, text) {
   const c = document.getElementById('chat-msgs');
   const d = document.createElement('div');
   d.className = 'msg '+role;
-
-  // Check for VAMIQ_PLAN_UPDATE block
-  let planUpdate = null;
-  let displayText = text;
-  const planIdx = text.indexOf('VAMIQ_PLAN_UPDATE:');
-  if (planIdx !== -1) {
-    try {
-      const jsonStr = text.slice(planIdx + 'VAMIQ_PLAN_UPDATE:'.length).trim();
-      const jsonEnd = jsonStr.indexOf('}') + 1;
-      planUpdate = JSON.parse(jsonStr.slice(0, jsonEnd));
-      displayText = text.slice(0, planIdx).trim();
-    } catch(e) { console.log('Plan parse error:', e); }
-  }
-
-  const formatted = displayText.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
-
-  let confirmHtml = '';
-  if (planUpdate && role === 'coach') {
-    const planPreview = Object.entries(planUpdate).map(([day, session]) =>
-      `<div style="display:flex;gap:8px;font-size:12px;padding:3px 0;border-bottom:1px solid #2E3029"><span style="width:30px;text-transform:capitalize;color:var(--mist)">${day}</span><span>${session}</span></div>`
-    ).join('');
-    confirmHtml = `<div class="plan-confirm" style="margin-top:0.75rem">
-      <strong>📅 Proposed plan changes:</strong>
-      <div style="margin:8px 0">${planPreview}</div>
-      <div class="plan-confirm-btns">
-        <button class="plan-accept" onclick="applyCoachPlan(this, ${JSON.stringify(planUpdate).replace(/"/g,'&quot;')})">✓ Apply to my calendar</button>
-        <button class="plan-reject" onclick="this.closest('.plan-confirm').remove()">✕ Keep current</button>
-      </div>
-    </div>`;
-  }
-
-  d.innerHTML = '<div class="mav">' + (role==='coach'?'🚴':'👤') + '</div><div class="mbub">' + formatted + confirmHtml + '</div>';
+  const formatted = text.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+  d.innerHTML = '<div class="mav">' + (role==='coach'?'🚴':'👤') + '</div><div class="mbub">' + formatted + '</div>';
   c.appendChild(d); c.scrollTop = c.scrollHeight;
   return d;
 }
