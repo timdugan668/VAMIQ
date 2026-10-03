@@ -2205,16 +2205,20 @@ function renderCalendar() {
       const isToday = date.toDateString() === today.toDateString();
       const isPast = date < today && !isToday;
       const isRace = userProfile?.goal_date && date.toDateString() === new Date(userProfile.goal_date).toDateString();
-      const isEvent = (window.coachEvents || []).some(e => new Date(e.date).toDateString() === date.toDateString());
+      const dateStr = date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0') + '-' + String(date.getDate()).padStart(2,'0');
+      const isEvent = (window.coachEvents || []).some(e => e.date === dateStr);
+      const eventObj = (window.coachEvents || []).find(e => e.date === dateStr);
       const isTaperStart = (window.coachEvents || []).some(e => {
         if (!e.taper) return false;
-        const taperStart = new Date(new Date(e.date) - 7 * 86400000);
-        return taperStart.toDateString() === date.toDateString();
+        const evDate = new Date(e.date + 'T12:00:00');
+        const taperDate = new Date(evDate - 7 * 86400000);
+        const taperStr = taperDate.getFullYear() + '-' + String(taperDate.getMonth()+1).padStart(2,'0') + '-' + String(taperDate.getDate()).padStart(2,'0');
+        return taperStr === dateStr;
       });
-      const cls = isRace ? 'race' : isEvent ? 'race' : type;
+      const cls = isRace ? 'race' : isEvent ? 'race' : isTaperStart ? 'taper' : type;
       const weekOffset = Math.floor((date - getMonday(today)) / (7 * 86400000));
       daysHtml += `<div class="cal-day ${cls}${isToday?' today':''}${isPast?' past':''}" 
-        title="${isRace?'RACE DAY!':isEvent?((window.coachEvents||[]).find(e=>new Date(e.date).toDateString()===date.toDateString())?.name||'Event')+'!':DAY_LABELS[type]}" 
+        title="${isRace?'RACE DAY!':isEvent?(eventObj?.name||'Event')+'!':isTaperStart?'Taper week':DAY_LABELS[type]}" 
         onclick="event.stopPropagation();showWeekFromDate('${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}')">${day}</div>`;
     }
 
