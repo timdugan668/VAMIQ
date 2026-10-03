@@ -984,6 +984,10 @@ async function initApp() {
   if (userProfile?.weekly_plan) {
     window.coachPlanOverride = userProfile.weekly_plan;
   }
+  // Load saved target events
+  if (userProfile?.target_events) {
+    window.coachEvents = userProfile.target_events;
+  }
 
   updateCountdowns();
   updateGoalDisplay();
@@ -1825,9 +1829,17 @@ TIMEZONE NOTE: Athlete timezone is \${userTimezone} (UTC offset \${userUTCOffset
 
 IMPORTANT: Tailor ALL coaching advice to the athlete's goal. Be specific, practical and encouraging. Australian casual tone. Concise but actionable.
 
-CALENDAR UPDATES — CRITICAL: When the athlete asks to update their schedule, change their plan, or asks what to do this week, you MUST include this block at the very end of your response on its own line with no text after it:
-VAMIQ_PLAN_UPDATE:{"mon":"Rest","tue":"90min Z2 rollers","wed":"3x12min threshold Z4","thu":"60min recovery Z1","fri":"2-3h social ride","sat":"Long ride","sun":"70km endurance"}
-Customise the values to match your actual recommendations. This is how the athlete applies your plan to their calendar — they will see Accept/Reject buttons. You MUST include this whenever updating a schedule.` + rideContext;
+CALENDAR UPDATES — CRITICAL: When the athlete asks to update their schedule or add target events, you MUST include BOTH blocks at the very end of your response, each on its own line:
+
+VAMIQ_PLAN_UPDATE:{"mon":"Rest","tue":"90min Z2 rollers","wed":"3x12min threshold Z4","thu":"60min recovery Z1","fri":"2-3h social ride","sat":"Fatigue climbs 3x8min Z5","sun":"Long ride 3-4h Z2"}
+
+VAMIQ_EVENTS_UPDATE:[{"name":"Mt Buffalo","date":"2026-11-05","taper":false},{"name":"Big Day Out 190km","date":"2026-12-21","taper":true},{"name":"Cadel Evans GOR","date":"2027-01-30","taper":true}]
+
+Rules:
+- VAMIQ_PLAN_UPDATE: 7 days mon-sun, session text only, no event info in session values
+- VAMIQ_EVENTS_UPDATE: array of events with name, date (YYYY-MM-DD), taper (true/false)
+- Both blocks must appear at end of response, no text after them
+- Always include both blocks when updating schedule or events` + rideContext;
 }
 
 async function send() {
@@ -1981,8 +1993,11 @@ function applyCoachPlan(btn) {
   confirmDiv.style.border = '1px solid #1A4A30';
 
   // Save to Supabase so it persists
+  const events = window.pendingEventsUpdate || null;
   if (currentUser) {
     sb.auth.getSession().then(({ data: { session } }) => {
+      const patchData = { weekly_plan: plan, updated_at: new Date().toISOString() };
+      if (events) patchData.target_events = events;
       fetch('https://cjonjfzpqtjpvrabjkla.supabase.co/rest/v1/profiles?id=eq.' + currentUser.id, {
         method: 'PATCH',
         headers: {
@@ -1991,10 +2006,16 @@ function applyCoachPlan(btn) {
           'Authorization': 'Bearer ' + session?.access_token,
           'Prefer': 'return=minimal'
         },
-        body: JSON.stringify({ weekly_plan: plan, updated_at: new Date().toISOString() })
+        body: JSON.stringify(patchData)
       }).then(r => console.log('Plan saved to Supabase:', r.status));
     });
     userProfile = { ...userProfile, weekly_plan: plan };
+    if (events) {
+      userProfile.target_events = events;
+      window.coachEvents = events;
+      window.pendingEventsUpdate = null;
+      renderCalendar(); // re-render to show event markers
+    }
   }
 
   // Switch to week tab
@@ -2124,10 +2145,16 @@ function renderCalendar() {
       const isToday = date.toDateString() === today.toDateString();
       const isPast = date < today && !isToday;
       const isRace = userProfile?.goal_date && date.toDateString() === new Date(userProfile.goal_date).toDateString();
-      const cls = isRace ? 'race' : type;
+      const isEvent = (window.coachEvents || []).some(e => new Date(e.date).toDateString() === date.toDateString());
+      const isTaperStart = (window.coachEvents || []).some(e => {
+        if (!e.taper) return false;
+        const taperStart = new Date(new Date(e.date) - 7 * 86400000);
+        return taperStart.toDateString() === date.toDateString();
+      });
+      const cls = isRace ? 'race' : isEvent ? 'race' : type;
       const weekOffset = Math.floor((date - getMonday(today)) / (7 * 86400000));
       daysHtml += `<div class="cal-day ${cls}${isToday?' today':''}${isPast?' past':''}" 
-        title="${isRace?'RACE DAY!':DAY_LABELS[type]}" 
+        title="${isRace?'RACE DAY!':isEvent?((window.coachEvents||[]).find(e=>new Date(e.date).toDateString()===date.toDateString())?.name||'Event')+'!':DAY_LABELS[type]}" 
         onclick="event.stopPropagation();showWeekFromDate('${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}')">${day}</div>`;
     }
 
