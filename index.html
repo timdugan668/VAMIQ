@@ -997,6 +997,8 @@ async function initApp() {
     document.getElementById('d-wkg').textContent = (userProfile.ftp / weight).toFixed(2);
     updateZones();
   }
+  // Update target card from profile
+  updateTargetCard(userProfile);
 
   updateCountdowns();
   updateGoalDisplay();
