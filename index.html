@@ -1928,6 +1928,38 @@ async function send() {
         msgs.scrollTop = msgs.scrollHeight;
       } catch(e) { console.log('Plan parse error:', e); }
     }
+
+    // Process VAMIQ_EVENTS_UPDATE after streaming completes
+    const eventsIdx = fullReply.indexOf('VAMIQ_EVENTS_UPDATE:');
+    if (eventsIdx !== -1) {
+      try {
+        const eventsStr = fullReply.slice(eventsIdx + 'VAMIQ_EVENTS_UPDATE:'.length).trim();
+        const eventsEnd = eventsStr.indexOf(']') + 1;
+        const events = JSON.parse(eventsStr.slice(0, eventsEnd));
+        window.pendingEventsUpdate = events;
+        console.log('Events parsed:', events);
+
+        // If no plan update button was shown, show events-only confirm button
+        if (planIdx === -1) {
+          const evList = events.map(e =>
+            '<div style="font-size:12px;padding:2px 0">📅 ' + e.name + ' — ' + e.date + (e.taper ? ' (taper week)' : '') + '</div>'
+          ).join('');
+          // Strip the VAMIQ_EVENTS_UPDATE line from display
+          const cleanText = fullReply.slice(0, eventsIdx).trim();
+          bubbleEl.innerHTML = cleanText.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>') +
+            '<div class="plan-confirm" style="margin-top:0.75rem">' +
+            '<strong>📅 Add these events to your calendar?</strong>' +
+            '<div style="margin:6px 0">' + evList + '</div>' +
+            '<div class="plan-confirm-btns">' +
+            '<button class="plan-accept" onclick="applyCoachPlan(this)">✓ Add to calendar</button>' +
+            '<button class="plan-reject" onclick="this.closest(\'.plan-confirm\').remove()">✕ Skip</button>' +
+            '</div></div>';
+          const msgs = document.getElementById('chat-msgs');
+          msgs.scrollTop = msgs.scrollHeight;
+        }
+      } catch(e) { console.log('Events parse error:', e); }
+    }
+
   } catch(e) {
     t.remove();
     addMsg('coach', '⚠️ '+e.message);
