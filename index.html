@@ -2312,9 +2312,29 @@ function renderWeekDetail() {
     const isToday = d.toDateString() === new Date().toDateString();
     const dayName = d.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'short'});
 
+    const dayDateStr = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const eventOnDay = (window.coachEvents || []).find(e => e.date === dayDateStr);
+    const isTaperWeek = (window.coachEvents || []).some(e => {
+      if (!e.taper) return false;
+      const evDate = new Date(e.date + 'T12:00:00');
+      const taperStart = new Date(evDate - 7 * 86400000);
+      const taperEnd = evDate;
+      return d >= taperStart && d < taperEnd;
+    });
+
     let detail = '';
     if (isRace) {
-      detail = `<strong>🏁 RACE DAY — ${userProfile.goal_event||'Your event'}!</strong> Everything you have trained for. Stick to your pacing plan. Enjoy every kilometre!`;
+      detail = '<strong>🏁 RACE DAY — ' + (userProfile.goal_event||'Your event') + '!</strong> Everything you have trained for. Stick to your pacing plan. Enjoy every kilometre!';
+    } else if (eventOnDay) {
+      const taperNote = eventOnDay.taper ? ' You had a taper week — legs should be fresh.' : ' No taper — treat as a hard training day.';
+      detail = '<strong>🏆 EVENT DAY — ' + eventOnDay.name + '!</strong>' + taperNote + ' Stick to your pacing plan, eat every 25–30 min, enjoy the ride!';
+    } else if (isTaperWeek) {
+      if (type === 'rest') detail = 'Taper rest day. Extra sleep, good nutrition, stay off your feet.';
+      else if (type === 'easy') detail = '<strong>TAPER — 45 min easy spin only.</strong> HR under ' + z1hr + ' bpm. Keep the legs ticking, nothing more.';
+      else if (type === 'threshold') detail = '<strong>TAPER — 30 min easy + 3×5 min at race pace.</strong> ' + z4low + '–' + z4hiw + 'W. Short and sharp. Done.';
+      else if (type === 'social') detail = 'TAPER — skip the group ride or do 45 min very easy only. Protect your legs.';
+      else if (type === 'fatigue') detail = '<strong>TAPER — 60 min easy with 2×5 min race pace efforts.</strong> HR under ' + z3hr + ' bpm. Short activation only.';
+      else if (type === 'long') detail = '<strong>TAPER — 90 min easy ride.</strong> Z1–Z2 only, HR under ' + z2hr + ' bpm. Check your bike, prepare kit and nutrition.';
     } else if (weeksOut !== null && weeksOut <= 1 && weeksOut > 0) {
       // Race week — taper
       if (type === 'rest') detail = 'Rest day. Sleep well, stay off your feet, trust your training.';
