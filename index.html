@@ -980,6 +980,11 @@ async function completeOnboarding(stravaData) {
 
 // ── APP ──
 async function initApp() {
+  // Load saved coach plan override
+  if (userProfile?.weekly_plan) {
+    window.coachPlanOverride = userProfile.weekly_plan;
+  }
+
   updateCountdowns();
   updateGoalDisplay();
   updateWeeklyPlan();
@@ -1135,6 +1140,31 @@ function updateGoalDisplay() {
 
 function updateWeeklyPlan() {
   if (!userProfile?.goal_type) return;
+
+  // If coach has applied a plan override, use that instead
+  if (window.coachPlanOverride) {
+    const plan = window.coachPlanOverride;
+    const days = ['mon','tue','wed','thu','fri','sat','sun'];
+    const dayMap = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
+    const typeMap = (s) => {
+      s = (s||'').toLowerCase();
+      if (s.includes('rest')) return { cls:'d-rest', dt:'Rest', dl:'Off/stretch' };
+      if (s.includes('threshold') || s.includes('z4') || s.includes('interval')) return { cls:'d-thresh', dt:'Threshold', dl:s };
+      if (s.includes('social') || s.includes('group')) return { cls:'d-social', dt:'Social Ride', dl:s };
+      if (s.includes('long')) return { cls:'d-long', dt:'Long Ride', dl:s };
+      if (s.includes('climb') || s.includes('fatigue')) return { cls:'d-fatigue', dt:'Climbing', dl:s };
+      return { cls:'d-easy', dt:'Z2 Endurance', dl:s };
+    };
+    const weekHtml = '<div class="wk">' + days.map(d => {
+      const session = plan[d] || 'Rest';
+      const { cls, dt, dl } = typeMap(session);
+      const isIndoor = dl.toLowerCase().includes('roller') || dl.toLowerCase().includes('indoor');
+      return '<div class="dc ' + cls + (isIndoor?' indoor':'') + '"><div class="dn">' + dayMap[d] + '</div><div class="dt">' + dt + '</div><div class="dl" style="font-size:10px;line-height:1.3">' + dl + '</div></div>';
+    }).join('') + '</div>';
+    const weekContent = document.getElementById('week-content');
+    if (weekContent) weekContent.innerHTML = weekHtml;
+    return;
+  }
   const hours = userProfile.hours_per_week || 10;
   const isHighVolume = hours >= 13;
   const ftp = userProfile.ftp || 215;
@@ -1934,25 +1964,70 @@ function addMsg(role, text) {
   return d;
 }
 
-function applyCoachPlan(btn, planJson) {
+function applyCoachPlan(btn) {
   const confirmDiv = btn.closest('.plan-confirm');
-  confirmDiv.innerHTML = '✅ <strong>Plan applied!</strong> Check the Calendar tab to see your updated training week.';
+  const plan = window.pendingPlanUpdate;
+  if (!plan) return;
+
+  // Map day names to display labels
+  const dayMap = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
+  const typeMap = (s) => {
+    s = s.toLowerCase();
+    if (s.includes('rest')) return { cls:'d-rest', dt:'Rest', dl:'Off/stretch' };
+    if (s.includes('z2') || s.includes('endurance') || s.includes('recovery') || s.includes('easy')) return { cls:'d-easy', dt:'Z2 Endurance', dl:s };
+    if (s.includes('threshold') || s.includes('z4') || s.includes('interval')) return { cls:'d-thresh', dt:'Threshold', dl:s };
+    if (s.includes('social') || s.includes('group')) return { cls:'d-social', dt:'Social Ride', dl:s };
+    if (s.includes('long')) return { cls:'d-long', dt:'Long Ride', dl:s };
+    if (s.includes('climb') || s.includes('fatigue')) return { cls:'d-fatigue', dt:'Climbing', dl:s };
+    return { cls:'d-easy', dt:'Ride', dl:s };
+  };
+
+  // Build updated week HTML from coach plan
+  const days = ['mon','tue','wed','thu','fri','sat','sun'];
+  const weekHtml = '<div class="wk">' + days.map(d => {
+    const session = plan[d] || 'Rest';
+    const { cls, dt, dl } = typeMap(session);
+    const isIndoor = dl.toLowerCase().includes('roller') || dl.toLowerCase().includes('indoor');
+    return '<div class="dc ' + cls + (isIndoor?' indoor':'') + '"><div class="dn">' + dayMap[d] + '</div><div class="dt">' + dt + '</div><div class="dl" style="font-size:10px;line-height:1.3">' + dl + '</div></div>';
+  }).join('') + '</div>';
+
+  // Find and update the week-content
+  const weekContent = document.getElementById('week-content');
+  if (weekContent) {
+    const existing = weekContent.innerHTML;
+    weekContent.innerHTML = weekHtml + existing.slice(existing.indexOf('</div>') + 6);
+  }
+
+  // Store override so it persists on tab switch
+  window.coachPlanOverride = plan;
+
+  confirmDiv.innerHTML = '✅ <strong>Plan applied!</strong> Switching to your calendar...';
   confirmDiv.style.background = 'var(--green-lo)';
   confirmDiv.style.border = '1px solid #1A4A30';
+  window.pendingPlanUpdate = null;
 
-  // Store the coach plan override
-  if (planJson) {
-    try {
-      const plan = typeof planJson === 'string' ? JSON.parse(planJson) : planJson;
-      window.coachPlanOverride = plan;
-    } catch(e) {}
+  // Save to Supabase so it persists
+  if (currentUser) {
+    sb.auth.getSession().then(({ data: { session } }) => {
+      fetch('https://cjonjfzpqtjpvrabjkla.supabase.co/rest/v1/profiles?id=eq.' + currentUser.id, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqb25qZnpwcXRqcHZyYWJqa2xhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxODg1MTIsImV4cCI6MjA5OTc2NDUxMn0.XVhLA6zk3TN1Q8fkp92iqcT41xrffZi5m-Ekj9uuyDc',
+          'Authorization': 'Bearer ' + session?.access_token,
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({ weekly_plan: plan, updated_at: new Date().toISOString() })
+      }).then(r => console.log('Plan saved to Supabase:', r.status));
+    });
+    userProfile = { ...userProfile, weekly_plan: plan };
   }
 
-  // Switch to calendar/week tab
-  const weekTab = Array.from(document.querySelectorAll('.nav-tab')).find(t => t.textContent.trim() === 'This week');
-  if (weekTab) {
-    setTimeout(() => { show('week', weekTab); }, 1200);
-  }
+  // Switch to week tab
+  setTimeout(() => {
+    const weekTab = Array.from(document.querySelectorAll('.nav-tab')).find(t => t.textContent.trim() === 'This week');
+    if (weekTab) show('week', weekTab);
+  }, 800);
 }
 
 function addTyping() {
@@ -1999,6 +2074,22 @@ const DAY_COLORS = { rest:'var(--gravel)', easy:'var(--green)', threshold:'var(-
 
 function getTrainingType(date) {
   const dow = date.getDay(); // 0=Sun,1=Mon...6=Sat
+  const dayKeys = { 1:'mon', 2:'tue', 3:'wed', 4:'thu', 5:'fri', 6:'sat', 0:'sun' };
+
+  // Use coach plan override if set
+  if (window.coachPlanOverride) {
+    const plan = window.coachPlanOverride;
+    const key = dayKeys[dow];
+    const session = (plan[key] || 'rest').toLowerCase();
+    if (session.includes('rest')) return 'rest';
+    if (session.includes('threshold') || session.includes('z4') || session.includes('interval')) return 'threshold';
+    if (session.includes('social') || session.includes('group')) return 'social';
+    if (session.includes('long')) return 'long';
+    if (session.includes('climb') || session.includes('fatigue')) return 'fatigue';
+    return 'easy';
+  }
+
+  // Default plan
   const map = { 1:'rest', 2:'easy', 3:'threshold', 4:'easy', 5:'social', 6:'fatigue', 0:'long' };
   return map[dow];
 }
