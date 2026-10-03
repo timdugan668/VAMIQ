@@ -481,7 +481,7 @@ select:focus { border-color:var(--orange); }
     </div>
     <p class="slabel">Your numbers</p>
     <div class="cards">
-      <div class="card"><div class="lbl">Est. FTP</div><div class="val c-orange" id="d-ftp">— W</div><div class="sub" id="d-ftp-sub">Sync Strava to calculate</div></div>
+      <div class="card"><div class="lbl">Est. FTP</div><div class="val c-orange" id="d-ftp">— W</div><div class="sub" id="d-ftp-sub">Connect Wahoo to calculate</div></div>
       <div class="card"><div class="lbl">W/kg</div><div class="val" id="d-wkg">—</div><div class="sub">Target: 3.0+</div></div>
       <div class="card"><div class="lbl">Best long ride</div><div class="val c-green" id="d-best">—</div><div class="sub" id="d-best-sub">Sync to load</div></div>
       <div class="card"><div class="lbl">Last ride</div><div class="val" id="d-last">—</div><div class="sub" id="d-last-sub">Sync to load</div></div>
@@ -989,6 +989,14 @@ async function initApp() {
   if (userProfile?.target_events) {
     window.coachEvents = userProfile.target_events;
   }
+  // Show FTP from profile immediately
+  if (userProfile?.ftp) {
+    const weight = userProfile.weight || 84;
+    document.getElementById('d-ftp').textContent = '~' + userProfile.ftp + ' W';
+    document.getElementById('d-ftp-sub').textContent = 'From your profile';
+    document.getElementById('d-wkg').textContent = (userProfile.ftp / weight).toFixed(2);
+    updateZones();
+  }
 
   updateCountdowns();
   updateGoalDisplay();
@@ -1141,6 +1149,49 @@ function updateGoalDisplay() {
     document.getElementById('d-target').textContent = 'Finish';
     document.getElementById('d-target-sub').textContent = 'Strong completion';
   }
+}
+
+function updateTargetCard(profile) {
+  const goalType = profile?.goal_type;
+  const goalEvent = profile?.goal_event || '';
+  const goalDate = profile?.goal_date ? new Date(profile.goal_date) : null;
+  const daysOut = goalDate ? Math.ceil((goalDate - new Date()) / 86400000) : null;
+
+  // Build target time based on goal event name
+  let targetTime = '—';
+  let targetSub = 'Based on your goal';
+
+  if (goalType === 'uci_qualifier') {
+    // Check if this is the qualifier (past) or the worlds (future)
+    if (goalDate && goalDate > new Date()) {
+      // Future event — show target time based on event
+      const eventLower = goalEvent.toLowerCase();
+      if (eventLower.includes('world') || eventLower.includes('worlds') || eventLower.includes('uci')) {
+        targetTime = 'Sub 3h 45m';
+        targetSub = 'UCI Worlds target time';
+      } else {
+        targetTime = '4h 30m';
+        targetSub = 'Top 25% qualifier target';
+      }
+    } else {
+      targetTime = 'Qualified!';
+      targetSub = '3h 56min · 231W avg';
+    }
+  } else if (goalType === 'gran_fondo') {
+    targetTime = 'Finish';
+    targetSub = 'Strong completion';
+  } else if (goalType === 'fitness') {
+    targetTime = 'Fitter';
+    targetSub = 'Health and performance';
+  } else if (goalType === 'century') {
+    targetTime = '100 km';
+    targetSub = 'Century completion';
+  }
+
+  const tEl = document.getElementById('d-target');
+  const sEl = document.getElementById('d-target-sub');
+  if (tEl) tEl.textContent = targetTime;
+  if (sEl) sEl.textContent = targetSub;
 }
 
 function updateWeeklyPlan() {
