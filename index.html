@@ -1375,6 +1375,35 @@ function reconnectStrava() {
   window.location.href = url;
 }
 
+function generateCodeVerifier() {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return btoa(String.fromCharCode(...array)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+
+async function generateCodeChallenge(verifier) {
+  const data = new TextEncoder().encode(verifier);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+
+function connectWahoo() {
+  const clientId = 'z7ZmfwYibynK3sWWtKMZk5e3I-urWsx_u6vfbxdHPfA';
+  const redirectUri = encodeURIComponent('https://vamiq.au/api/wahoo-callback');
+  const scopes = encodeURIComponent('email user_read workouts_read power_zones_read routes_read');
+  const verifier = generateCodeVerifier();
+  sessionStorage.setItem('wahoo_verifier', verifier);
+  const state = encodeURIComponent(verifier);
+  generateCodeChallenge(verifier).then(challenge => {
+    const url = 'https://api.wahooligan.com/oauth/authorize?client_id=' + clientId +
+      '&response_type=code&redirect_uri=' + redirectUri +
+      '&scope=' + scopes +
+      '&code_challenge=' + challenge +
+      '&code_challenge_method=S256&state=' + state;
+    window.location.href = url;
+  });
+}
+
 function loadProfileTab() {
   if (!userProfile) return;
   const p = userProfile;
