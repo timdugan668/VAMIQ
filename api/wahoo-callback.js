@@ -2,32 +2,39 @@ export default async function handler(req, res) {
   const { code, error, state } = req.query;
 
   if (error) {
-    return res.redirect('/?wahoo_error=' + encodeURIComponent(error));
+    return res.redirect('/?wahoo_error=' + encodeURIComponent(JSON.stringify(error)));
   }
 
   if (!code) {
     return res.redirect('/?wahoo_error=no_code');
   }
 
+  const clientId = process.env.WAHOO_CLIENT_ID || 'YqeOHPR6TZ8M5rqCMepKNDB23XqEFDWgQlrMbB6aPnI';
+  const redirectUri = 'https://vamiq.au/api/wahoo-callback';
+
   try {
-    // Exchange code for tokens using PKCE
-    // code_verifier was stored in state parameter
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: redirectUri,
+      client_id: clientId,
+    });
+
+    // Only add code_verifier if state is present
+    if (state) {
+      body.append('code_verifier', decodeURIComponent(state));
+    }
+
     const r = await fetch('https://api.wahooligan.com/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: 'https://vamiq.au/api/wahoo-callback',
-        client_id: process.env.WAHOO_CLIENT_ID,
-        code_verifier: state || ''
-      })
+      body: body.toString()
     });
 
     const data = await r.json();
 
     if (!data.access_token) {
-      return res.redirect('/?wahoo_error=' + encodeURIComponent(JSON.stringify(data.error_description || data.error || 'token_failed')));
+      return res.redirect('/?wahoo_error=' + encodeURIComponent(JSON.stringify(data.error_description || data.error || data.message || 'token_failed')));
     }
 
     const params = new URLSearchParams({
@@ -42,4 +49,3 @@ export default async function handler(req, res) {
     return res.redirect('/?wahoo_error=' + encodeURIComponent(e.message));
   }
 }
-
