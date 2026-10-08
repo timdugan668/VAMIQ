@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-  const { code, error, state } = req.query;
+  const { code, error } = req.query;
 
   if (error) {
     return res.redirect('/?wahoo_error=' + encodeURIComponent(JSON.stringify(error)));
@@ -10,25 +10,24 @@ export default async function handler(req, res) {
   }
 
   const clientId = process.env.WAHOO_CLIENT_ID || 'YqeOHPR6TZ8M5rqCMepKNDB23XqEFDWgQlrMbB6aPnI';
+  const clientSecret = process.env.WAHOO_CLIENT_SECRET || 'z7ZmfwYibynK3sWWtKMZk5e3I-urWsx_u6vfbxdHPfA';
   const redirectUri = 'https://vamiq.au/api/wahoo-callback';
 
   try {
-    const body = new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: redirectUri,
-      client_id: clientId,
-    });
-
     const r = await fetch('https://api.wahooligan.com/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString()
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: redirectUri,
+        client_id: clientId,
+        client_secret: clientSecret,
+      }).toString()
     });
 
     const text = await r.text();
-    console.log('Wahoo token response status:', r.status);
-    console.log('Wahoo token response:', text);
+    console.log('Wahoo token status:', r.status, 'response:', text.substring(0, 200));
 
     let data;
     try { data = JSON.parse(text); } catch(e) { data = { error: text }; }
