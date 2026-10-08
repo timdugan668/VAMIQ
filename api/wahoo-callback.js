@@ -20,11 +20,6 @@ export default async function handler(req, res) {
       client_id: clientId,
     });
 
-    // Only add code_verifier if state is present
-    if (state) {
-      body.append('code_verifier', decodeURIComponent(state));
-    }
-
     const r = await fetch('https://api.wahooligan.com/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
