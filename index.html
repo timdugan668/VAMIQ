@@ -617,6 +617,7 @@ select:focus { border-color:var(--orange); }
     </div>
     <div class="field"><label>Target event</label><input type="text" id="p-event" placeholder="e.g. UCI Gran Fondo World Championships, France" /></div>
     <div class="field"><label>Event date</label><input type="date" id="p-event-date" /></div>
+    <div class="field"><label>Target time (e.g. 3h 45m)</label><input type="text" id="p-target-time" placeholder="e.g. 3h 45m or Sub 4 hours" /></div>
 
     <button class="btn-primary" onclick="saveProfileEdits()">Save changes</button>
     <div class="field-hint success" id="profile-saved" style="margin-top:0.75rem;display:none;text-align:center">✓ Profile saved!</div>
@@ -1192,7 +1193,7 @@ function updateTargetCard(profile) {
       // Future event — show target time based on event
       const eventLower = goalEvent.toLowerCase();
       if (eventLower.includes('world') || eventLower.includes('worlds') || eventLower.includes('uci')) {
-        targetTime = 'Sub 3h 45m';
+        targetTime = profile?.target_time || 'Sub 3h 45m';
         targetSub = 'UCI Worlds target time';
       } else {
         targetTime = '4h 30m';
@@ -1203,7 +1204,7 @@ function updateTargetCard(profile) {
       targetSub = '3h 56min · 231W avg';
     }
   } else if (goalType === 'gran_fondo') {
-    targetTime = 'Finish';
+    targetTime = profile?.target_time || 'Finish';
     targetSub = 'Strong completion';
   } else if (goalType === 'fitness') {
     targetTime = 'Fitter';
@@ -1450,6 +1451,7 @@ function loadProfileTab() {
   if (document.getElementById('p-goal-type')) document.getElementById('p-goal-type').value = p.goal_type || 'uci_qualifier';
   document.getElementById('p-goal-text').value = p.goal_text || '';
   document.getElementById('p-event').value = p.goal_event || '';
+  if (document.getElementById('p-target-time')) document.getElementById('p-target-time').value = p.target_time || '';
   document.getElementById('p-event-date').value = p.goal_date || '';
 
   const goalLabels = { uci_qualifier:'UCI Gran Fondo Worlds Qualifier', gran_fondo:'Gran Fondo', fitness:'General Fitness', century:'Century Ride' };
@@ -1474,6 +1476,7 @@ async function saveProfileEdits() {
     goal_text: document.getElementById('p-goal-text').value.trim(),
     goal_event: document.getElementById('p-event').value.trim(),
     goal_date: document.getElementById('p-event-date').value || null,
+    target_time: document.getElementById('p-target-time') ? document.getElementById('p-target-time').value.trim() : null,
   };
   await saveProfile({ ...userProfile, ...updates });
   userProfile = { ...userProfile, ...updates };
@@ -1494,26 +1497,8 @@ async function saveProfileEdits() {
     document.getElementById('d-wkg').textContent = (ftp/weight).toFixed(2);
   }
 
-  // Update target card
-  if (updates.goal_type === 'uci_qualifier') {
-    const amysDone = new Date('2026-09-13') < new Date();
-    if (amysDone) {
-      document.getElementById('d-target').textContent = 'Qualified!';
-      document.getElementById('d-target-sub').textContent = "3h 56min · 231W avg";
-    } else {
-      document.getElementById('d-target').textContent = '4h 30m';
-      document.getElementById('d-target-sub').textContent = 'Top 25% qualifier target';
-    }
-  } else if (updates.goal_type === 'gran_fondo') {
-    document.getElementById('d-target').textContent = 'Finish';
-    document.getElementById('d-target-sub').textContent = 'Strong completion';
-  } else if (updates.goal_type === 'fitness') {
-    document.getElementById('d-target').textContent = 'Fitter';
-    document.getElementById('d-target-sub').textContent = 'Health and performance';
-  } else if (updates.goal_type === 'century') {
-    document.getElementById('d-target').textContent = '100 km';
-    document.getElementById('d-target-sub').textContent = 'Century completion';
-  }
+  // Update target card using the saved profile
+  updateTargetCard({ ...userProfile, ...updates });
 
   // Update days countdown
   if (updates.goal_date) {
@@ -1589,6 +1574,7 @@ async function syncWahoo() {
 }
 
 function renderWahooRides(workouts) {
+  window.wahooWorkouts = workouts; // cache for ride detail modal
   // workout_type_id: 0=outdoor cycling, 12=indoor cycling
   const rides = workouts.filter(w => w.workout_type_id === 0 || w.workout_type_id === 12).slice(0, 20);
   if (!rides.length) {
@@ -1707,15 +1693,82 @@ function updateDashboardFromWahoo(workouts) {
 }
 
 function openWahooRide(id) {
-  // Show basic modal for Wahoo ride
+  // Find ride in cached workouts
+  const ride = (window.wahooWorkouts || []).find(w => String(w.id) === String(id));
+  if (!ride) return;
+
+  const s = ride.workout_summary || {};
+  const isIndoor = ride.workout_type_id === 12;
+  const km = s.distance_accum ? (parseFloat(s.distance_accum)/1000).toFixed(1) : '—';
+  const elev = s.ascent_accum ? Math.round(parseFloat(s.ascent_accum)) : 0;
+  const mins = s.duration_active_accum ? Math.round(parseFloat(s.duration_active_accum)/60) : 0;
+  const duration = mins >= 60 ? Math.floor(mins/60)+'h '+(mins%60)+'m' : mins+'m';
+  const hr = s.heart_rate_avg ? Math.round(parseFloat(s.heart_rate_avg)) : 0;
+  const cad = s.cadence_avg ? Math.round(parseFloat(s.cadence_avg)) : 0;
+  const cal = s.calories_accum ? Math.round(parseFloat(s.calories_accum)) : 0;
+  const date = ride.starts ? new Date(ride.starts).toLocaleDateString('en-AU', {weekday:'long',day:'numeric',month:'long',year:'numeric'}) : '';
+  const ftp = userProfile?.ftp || 290;
+
   document.getElementById('ride-modal').style.display = 'flex';
-  document.getElementById('modal-title').textContent = 'Wahoo ride';
-  document.getElementById('modal-stats').innerHTML = '<p style="color:var(--mist);font-size:13px">Full Wahoo ride detail coming soon. Ask the coach about this ride below.</p>';
+  document.getElementById('modal-title').textContent = ride.name || 'Wahoo Ride';
+
+  document.getElementById('modal-stats').innerHTML = `
+    <div style="font-size:12px;color:var(--mist);margin-bottom:0.75rem">${date}${isIndoor?' · 🏠 Indoor':''}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:1rem">
+      <div style="background:var(--gravel);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:700;color:var(--white)">${duration}</div>
+        <div style="font-size:10px;color:var(--mist)">DURATION</div>
+      </div>
+      ${!isIndoor ? `<div style="background:var(--gravel);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:700;color:var(--white)">${km}</div>
+        <div style="font-size:10px;color:var(--mist)">KM</div>
+      </div>
+      <div style="background:var(--gravel);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:700;color:var(--white)">${elev}m</div>
+        <div style="font-size:10px;color:var(--mist)">ELEVATION</div>
+      </div>` : `<div style="background:var(--gravel);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:700;color:var(--white)">${cal}</div>
+        <div style="font-size:10px;color:var(--mist)">CALORIES</div>
+      </div>
+      <div style="background:var(--gravel);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:700;color:var(--white)">${cad || '—'}</div>
+        <div style="font-size:10px;color:var(--mist)">AVG RPM</div>
+      </div>`}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${hr ? `<div style="background:var(--gravel);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:700;color:#E86B6B">${hr} bpm</div>
+        <div style="font-size:10px;color:var(--mist)">AVG HEART RATE</div>
+      </div>` : ''}
+      ${cad && !isIndoor ? `<div style="background:var(--gravel);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:700;color:var(--white)">${cad} rpm</div>
+        <div style="font-size:10px;color:var(--mist)">AVG CADENCE</div>
+      </div>` : ''}
+      <div style="background:var(--gravel);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:700;color:var(--orange)">${cal} kcal</div>
+        <div style="font-size:10px;color:var(--mist)">CALORIES</div>
+      </div>
+    </div>
+    ${hr ? `<div style="margin-top:1rem;font-size:12px;color:var(--mist)">
+      <strong style="color:var(--fog)">HR Zone estimate:</strong> 
+      ${hr < ftp*0.6 ? 'Z1 Recovery' : hr < ftp*0.75 ? 'Z2 Endurance' : hr < ftp*0.87 ? 'Z3 Tempo' : hr < ftp*0.95 ? 'Z4 Threshold' : 'Z5 VO2Max'}
+      (avg ${hr} bpm)
+    </div>` : ''}
+  `;
+
   document.getElementById('route-map').innerHTML = '';
   document.getElementById('elev-section').style.display = 'none';
   document.getElementById('hr-section').style.display = 'none';
   document.getElementById('segments-section').style.display = 'none';
   document.getElementById('streams-section').style.display = 'none';
+
+  // Set coach context for this ride
+  window.CURRENT_RIDE_CONTEXT = `
+Ride: ${ride.name}, ${date}
+Duration: ${duration}${!isIndoor ? ', Distance: '+km+'km, Elevation: '+elev+'m' : ''}
+Avg HR: ${hr} bpm, Cadence: ${cad} rpm, Calories: ${cal} kcal
+Type: ${isIndoor ? 'Indoor trainer' : 'Outdoor ride'}
+  `;
 }
 
 async function syncStrava() {
@@ -1835,15 +1888,18 @@ function updateDashboard(rides) {
     updateZones();
   }
 
-  // Progress bars
+  // Progress bars - handle both Strava and Wahoo field names
+  const getRideDist = r => parseFloat(r.distance_accum || r.distance || 0);
+  const getRideElev = r => parseFloat(r.ascent_accum || r.total_elevation_gain || 0);
+  const getRideTime = r => parseFloat(r.duration_active_accum || r.moving_time || 0);
+
   if (outdoor.length && userProfile?.goal_date) {
-    const bestDist = Math.max(...outdoor.map(r=>r.distance));
+    const bestDist = Math.max(...outdoor.map(getRideDist));
     const targetDist = userProfile.goal_type === 'century' ? 100000 : 122000;
-    const bestElev = Math.max(...outdoor.map(r=>r.total_elevation_gain));
+    const bestElev = Math.max(...outdoor.map(r => getRideElev(r.workout_summary || r)));
     const targetElev = userProfile.goal_type === 'uci_qualifier' ? 1869 : 1200;
-    // Only use long outdoor rides (>50km) for time-based metrics
-    const longOutdoor = outdoor.filter(r => r.distance > 50000);
-    const bestTime = longOutdoor.length ? Math.max(...longOutdoor.map(r=>r.moving_time)) : 0;
+    const longOutdoor = outdoor.filter(r => getRideDist(r.workout_summary || r) > 50000);
+    const bestTime = longOutdoor.length ? Math.max(...longOutdoor.map(r => getRideTime(r.workout_summary || r))) : 0;
     const targetTime = 270 * 60; // 4h 30min in seconds
 
     const goalPassed = userProfile?.goal_date && new Date(userProfile.goal_date) < new Date();
