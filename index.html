@@ -1093,8 +1093,13 @@ async function initApp() {
   // Save pending Wahoo tokens
   if (window.PENDING_WAHOO && currentUser) {
     try {
-      const { data: { session } } = await sb.auth.getSession();
-      const authToken = session?.access_token;
+      // Get session - retry if not ready yet
+      let authToken = null;
+      for (let i = 0; i < 3; i++) {
+        const { data: { session } } = await sb.auth.getSession();
+        if (session?.access_token) { authToken = session.access_token; break; }
+        await new Promise(r => setTimeout(r, 500));
+      }
       const r = await fetch(
         'https://cjonjfzpqtjpvrabjkla.supabase.co/rest/v1/profiles?id=eq.' + currentUser.id,
         {
@@ -1102,7 +1107,7 @@ async function initApp() {
           headers: {
             'Content-Type': 'application/json',
             'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqb25qZnpwcXRqcHZyYWJqa2xhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxODg1MTIsImV4cCI6MjA5OTc2NDUxMn0.XVhLA6zk3TN1Q8fkp92iqcT41xrffZi5m-Ekj9uuyDc',
-            'Authorization': 'Bearer ' + authToken,
+            'Authorization': 'Bearer ' + (authToken || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqb25qZnpwcXRqcHZyYWJqa2xhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxODg1MTIsImV4cCI6MjA5OTc2NDUxMn0.XVhLA6zk3TN1Q8fkp92iqcT41xrffZi5m-Ekj9uuyDc'),
             'Prefer': 'return=minimal'
           },
           body: JSON.stringify({
@@ -1128,7 +1133,8 @@ async function initApp() {
     showSyncError('Wahoo connection failed: ' + window.WAHOO_ERROR);
     window.WAHOO_ERROR = null;
   }
-  if (userProfile?.wahoo_access_token) syncWahoo();
+  // Only auto-sync if token is from profile (not just connected)
+  if (userProfile?.wahoo_access_token && !window.PENDING_WAHOO) syncWahoo();
   if (userProfile?.name) {
     document.getElementById('app-sub').textContent = 'Welcome back, ' + userProfile.name;
   }
