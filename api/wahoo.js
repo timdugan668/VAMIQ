@@ -15,7 +15,7 @@ export default async function handler(req, res) {
         body: new URLSearchParams({
           grant_type: 'refresh_token',
           refresh_token,
-          client_id: process.env.WAHOO_CLIENT_ID
+          client_id: process.env.WAHOO_CLIENT_ID || 'YqeOHPR6TZ8M5rqCMepKNDB23XqEFDWgQlrMbB6aPnI'
         })
       });
       const d = await r.json();
@@ -62,4 +62,3 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message });
   }
 }
-
