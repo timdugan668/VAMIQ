@@ -1715,12 +1715,13 @@ async function openWahooRide(id) {
   document.getElementById('modal-title').textContent = ride.name || 'Wahoo Ride';
   if (document.getElementById('modal-date')) document.getElementById('modal-date').textContent = date + (isIndoor ? ' · 🏠 Indoor' : '');
 
+  const maxHRval = s.heart_rate_max ? Math.round(parseFloat(s.heart_rate_max)) : 0;
   document.getElementById('modal-stats').innerHTML = [
     { val: duration, lbl: 'Moving time' },
     { val: !isIndoor ? km+' km' : '—', lbl: 'Distance' },
     { val: !isIndoor ? elev+'m' : '—', lbl: 'Elevation' },
     { val: hr ? hr+' bpm' : '—', lbl: 'Avg HR' },
-    { val: maxHR ? maxHR+' bpm' : '—', lbl: 'Max HR' },
+    { val: maxHRval ? maxHRval+' bpm' : '—', lbl: 'Max HR' },
     { val: power ? power+'W' : '—', lbl: 'Avg power' },
     { val: cad ? cad+' rpm' : '—', lbl: 'Cadence' },
     { val: cal+' kcal', lbl: 'Calories' },
@@ -2792,7 +2793,18 @@ async function openRide(activityId) {
 }
 
 function askCoachAboutRide() {
-  if (!currentRideData) return;
+  // Works with both Strava (currentRideData) and Wahoo (CURRENT_RIDE_CONTEXT)
+  if (!currentRideData && !window.CURRENT_RIDE_CONTEXT) return;
+
+  // If Wahoo ride, use the pre-built context directly
+  if (!currentRideData && window.CURRENT_RIDE_CONTEXT) {
+    closeModal();
+    show('coach', document.querySelector('.nav-tab[onclick*="coach"]'));
+    const msg = 'Can you analyse this ride for me and give me some coaching feedback?\n\n' + window.CURRENT_RIDE_CONTEXT;
+    document.getElementById('chat-input').value = msg;
+    sendMsg();
+    return;
+  }
 
   const act = currentRideData;
   const streams = currentRideStreams || {};
