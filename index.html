@@ -1589,7 +1589,8 @@ async function syncWahoo() {
 }
 
 function renderWahooRides(workouts) {
-  const rides = workouts.filter(w => w.workout_type_family_name === 'CYCLING' || w.workout_type?.name?.includes('Cycling') || w.workout_type?.name?.includes('cycling')).slice(0, 20);
+  // workout_type_id: 0=outdoor cycling, 12=indoor cycling
+  const rides = workouts.filter(w => w.workout_type_id === 0 || w.workout_type_id === 12).slice(0, 20);
   if (!rides.length) {
     document.getElementById('rides-list').innerHTML = '<p style="color:var(--mist);font-size:13px">No cycling workouts found in Wahoo.</p>';
     return;
@@ -1597,14 +1598,15 @@ function renderWahooRides(workouts) {
   const list = document.getElementById('rides-list');
   list.innerHTML = rides.map(r => {
     const summary = r.workout_summary || {};
-    const km = summary.distance_accum ? (summary.distance_accum / 1000).toFixed(1) : '—';
-    const elev = summary.ascent_accum ? Math.round(summary.ascent_accum) : 0;
-    const mins = summary.duration_active_accum ? Math.round(summary.duration_active_accum / 60) : 0;
+    const km = summary.distance_accum ? (parseFloat(summary.distance_accum) / 1000).toFixed(1) : '—';
+    const elev = summary.ascent_accum ? Math.round(parseFloat(summary.ascent_accum)) : 0;
+    const mins = summary.duration_active_accum ? Math.round(parseFloat(summary.duration_active_accum) / 60) : 0;
     const duration = mins >= 60 ? Math.floor(mins/60)+'h '+(mins%60)+'m' : mins+'m';
-    const date = r.created_at ? new Date(r.created_at).toLocaleDateString('en-AU', {weekday:'short',day:'numeric',month:'short'}) : '—';
-    const avgHR = summary.heart_rate_avg ? Math.round(summary.heart_rate_avg) : 0;
-    const avgPower = summary.power_bike_avg ? Math.round(summary.power_bike_avg) : 0;
-    const isLong = (summary.distance_accum || 0) > 80000;
+    const date = r.starts ? new Date(r.starts).toLocaleDateString('en-AU', {weekday:'short',day:'numeric',month:'short'}) : '—';
+    const avgHR = summary.heart_rate_avg ? Math.round(parseFloat(summary.heart_rate_avg)) : 0;
+    const avgPower = summary.power_avg ? Math.round(parseFloat(summary.power_avg)) : 0;
+    const isIndoor = r.workout_type_id === 12;
+    const isLong = parseFloat(summary.distance_accum || 0) > 80000;
     return `<div class="ride-row" onclick="openWahooRide('${r.id}')" style="cursor:pointer">
       <div class="rdot" style="background:${isLong?'var(--orange)':'var(--green)'}"></div>
       <div class="rinfo">
@@ -1653,7 +1655,7 @@ ${rideList}`;
 }
 
 function updateDashboardFromWahoo(workouts) {
-  const rides = workouts.filter(w => w.workout_type_family_name === 'CYCLING' || w.workout_type?.name?.includes('ycling'));
+  const rides = workouts.filter(w => w.workout_type_id === 0 || w.workout_type_id === 12);
   if (!rides.length) return;
   const weight = userProfile?.weight || 84;
 
