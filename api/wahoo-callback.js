@@ -26,10 +26,15 @@ export default async function handler(req, res) {
       body: body.toString()
     });
 
-    const data = await r.json();
+    const text = await r.text();
+    console.log('Wahoo token response status:', r.status);
+    console.log('Wahoo token response:', text);
+
+    let data;
+    try { data = JSON.parse(text); } catch(e) { data = { error: text }; }
 
     if (!data.access_token) {
-      return res.redirect('/?wahoo_error=' + encodeURIComponent(JSON.stringify(data.error_description || data.error || data.message || 'token_failed')));
+      return res.redirect('/?wahoo_error=' + encodeURIComponent(JSON.stringify(data)));
     }
 
     const params = new URLSearchParams({
