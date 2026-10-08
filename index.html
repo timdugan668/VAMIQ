@@ -1692,8 +1692,7 @@ function updateDashboardFromWahoo(workouts) {
   document.getElementById('d-summary').innerHTML = `<strong>Wahoo synced.</strong> ${date}: ${km}km, ${Math.floor(mins/60)}h${mins%60}min${s.heart_rate_avg?', avg '+Math.round(s.heart_rate_avg)+'bpm':''}${s.power_bike_avg?', avg '+Math.round(s.power_bike_avg)+'W':''}. Keep building toward your goal!`;
 }
 
-function openWahooRide(id) {
-  // Find ride in cached workouts
+async function openWahooRide(id) {
   const ride = (window.wahooWorkouts || []).find(w => String(w.id) === String(id));
   if (!ride) return;
 
@@ -1704,71 +1703,126 @@ function openWahooRide(id) {
   const mins = s.duration_active_accum ? Math.round(parseFloat(s.duration_active_accum)/60) : 0;
   const duration = mins >= 60 ? Math.floor(mins/60)+'h '+(mins%60)+'m' : mins+'m';
   const hr = s.heart_rate_avg ? Math.round(parseFloat(s.heart_rate_avg)) : 0;
+  const maxHR = s.heart_rate_max ? Math.round(parseFloat(s.heart_rate_max)) : 0;
   const cad = s.cadence_avg ? Math.round(parseFloat(s.cadence_avg)) : 0;
   const cal = s.calories_accum ? Math.round(parseFloat(s.calories_accum)) : 0;
+  const power = s.power_avg ? Math.round(parseFloat(s.power_avg)) : 0;
   const date = ride.starts ? new Date(ride.starts).toLocaleDateString('en-AU', {weekday:'long',day:'numeric',month:'long',year:'numeric'}) : '';
   const ftp = userProfile?.ftp || 290;
 
+  // Show modal immediately with stats
   document.getElementById('ride-modal').style.display = 'flex';
   document.getElementById('modal-title').textContent = ride.name || 'Wahoo Ride';
+  if (document.getElementById('modal-date')) document.getElementById('modal-date').textContent = date + (isIndoor ? ' · 🏠 Indoor' : '');
 
-  document.getElementById('modal-stats').innerHTML = `
-    <div style="font-size:12px;color:var(--mist);margin-bottom:0.75rem">${date}${isIndoor?' · 🏠 Indoor':''}</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:1rem">
-      <div style="background:var(--gravel);border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:18px;font-weight:700;color:var(--white)">${duration}</div>
-        <div style="font-size:10px;color:var(--mist)">DURATION</div>
-      </div>
-      ${!isIndoor ? `<div style="background:var(--gravel);border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:18px;font-weight:700;color:var(--white)">${km}</div>
-        <div style="font-size:10px;color:var(--mist)">KM</div>
-      </div>
-      <div style="background:var(--gravel);border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:18px;font-weight:700;color:var(--white)">${elev}m</div>
-        <div style="font-size:10px;color:var(--mist)">ELEVATION</div>
-      </div>` : `<div style="background:var(--gravel);border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:18px;font-weight:700;color:var(--white)">${cal}</div>
-        <div style="font-size:10px;color:var(--mist)">CALORIES</div>
-      </div>
-      <div style="background:var(--gravel);border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:18px;font-weight:700;color:var(--white)">${cad || '—'}</div>
-        <div style="font-size:10px;color:var(--mist)">AVG RPM</div>
-      </div>`}
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      ${hr ? `<div style="background:var(--gravel);border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:18px;font-weight:700;color:#E86B6B">${hr} bpm</div>
-        <div style="font-size:10px;color:var(--mist)">AVG HEART RATE</div>
-      </div>` : ''}
-      ${cad && !isIndoor ? `<div style="background:var(--gravel);border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:18px;font-weight:700;color:var(--white)">${cad} rpm</div>
-        <div style="font-size:10px;color:var(--mist)">AVG CADENCE</div>
-      </div>` : ''}
-      <div style="background:var(--gravel);border-radius:8px;padding:10px;text-align:center">
-        <div style="font-size:18px;font-weight:700;color:var(--orange)">${cal} kcal</div>
-        <div style="font-size:10px;color:var(--mist)">CALORIES</div>
-      </div>
-    </div>
-    ${hr ? `<div style="margin-top:1rem;font-size:12px;color:var(--mist)">
-      <strong style="color:var(--fog)">HR Zone estimate:</strong> 
-      ${hr < ftp*0.6 ? 'Z1 Recovery' : hr < ftp*0.75 ? 'Z2 Endurance' : hr < ftp*0.87 ? 'Z3 Tempo' : hr < ftp*0.95 ? 'Z4 Threshold' : 'Z5 VO2Max'}
-      (avg ${hr} bpm)
-    </div>` : ''}
-  `;
+  document.getElementById('modal-stats').innerHTML = [
+    { val: duration, lbl: 'Moving time' },
+    { val: !isIndoor ? km+' km' : '—', lbl: 'Distance' },
+    { val: !isIndoor ? elev+'m' : '—', lbl: 'Elevation' },
+    { val: hr ? hr+' bpm' : '—', lbl: 'Avg HR' },
+    { val: maxHR ? maxHR+' bpm' : '—', lbl: 'Max HR' },
+    { val: power ? power+'W' : '—', lbl: 'Avg power' },
+    { val: cad ? cad+' rpm' : '—', lbl: 'Cadence' },
+    { val: cal+' kcal', lbl: 'Calories' },
+  ].map(s => '<div class="modal-stat"><div class="val" style="font-size:16px">'+s.val+'</div><div class="lbl">'+s.lbl+'</div></div>').join('');
 
-  document.getElementById('route-map').innerHTML = '';
+  // Clear map/charts
+  if (leafletMap) { leafletMap.remove(); leafletMap = null; }
+  document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">Loading route...</div>';
   document.getElementById('elev-section').style.display = 'none';
   document.getElementById('hr-section').style.display = 'none';
   document.getElementById('segments-section').style.display = 'none';
   document.getElementById('streams-section').style.display = 'none';
 
-  // Set coach context for this ride
-  window.CURRENT_RIDE_CONTEXT = `
-Ride: ${ride.name}, ${date}
-Duration: ${duration}${!isIndoor ? ', Distance: '+km+'km, Elevation: '+elev+'m' : ''}
-Avg HR: ${hr} bpm, Cadence: ${cad} rpm, Calories: ${cal} kcal
-Type: ${isIndoor ? 'Indoor trainer' : 'Outdoor ride'}
-  `;
+  // Set coach context
+  window.CURRENT_RIDE_CONTEXT = 'Wahoo ride: '+ride.name+', '+date+', Duration: '+duration+(isIndoor?', Indoor trainer':', Distance: '+km+'km, Elevation: '+elev+'m')+', Avg HR: '+hr+' bpm, Cadence: '+cad+' rpm, Calories: '+cal+' kcal'+(power?', Avg power: '+power+'W':'');
+
+  // Fetch FIT file for GPS + streams
+  const fitUrl = s.file?.url;
+  if (!fitUrl) {
+    document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">No route data available</div>';
+    return;
+  }
+
+  try {
+    const params = new URLSearchParams({
+      fit_url: fitUrl,
+      access_token: userProfile.wahoo_access_token
+    });
+    const r = await fetch('/api/wahoo-fit?' + params);
+    const data = await r.json();
+
+    if (data.error) {
+      document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">'+data.error+'</div>';
+      return;
+    }
+
+    // Route map
+    if (data.latlng?.length > 5) {
+      leafletMap = L.map('route-map', { zoomControl:false, attributionControl:false });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(leafletMap);
+      const polyline = L.polyline(data.latlng, { color: '#FC4C02', weight: 3 }).addTo(leafletMap);
+      leafletMap.fitBounds(polyline.getBounds(), { padding: [10,10] });
+    } else {
+      document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">No GPS data in this ride</div>';
+    }
+
+    // Elevation profile
+    if (data.altitude?.length > 5) {
+      document.getElementById('elev-section').style.display = 'block';
+      drawElevation(data.altitude);
+    }
+
+    // HR zones
+    if (data.heartrate?.length > 5) {
+      const hrData = data.heartrate;
+      const maxHRest = Math.round(ftp * 1.22);
+      const zones = [
+        { name:'Z1', color:'#4CAF7D', max: maxHRest*0.60 },
+        { name:'Z2', color:'#2D9B6A', max: maxHRest*0.72 },
+        { name:'Z3', color:'#E8C30A', max: maxHRest*0.83 },
+        { name:'Z4', color:'#E8A20A', max: maxHRest*0.95 },
+        { name:'Z5+', color:'#E84040', max: 999 }
+      ];
+      const counts = [0,0,0,0,0];
+      hrData.forEach(h => { for(let i=0;i<zones.length;i++){if(h<=zones[i].max){counts[i]++;break;}} });
+      const total = hrData.length || 1;
+      document.getElementById('hr-section').style.display = 'block';
+      document.getElementById('hr-zones-bar').innerHTML = zones.map((z,i) =>
+        '<div style="flex:'+counts[i]+';background:'+z.color+';min-width:'+(counts[i]>0?'2px':'0')+'"></div>'
+      ).join('');
+      document.getElementById('hr-zones-legend').innerHTML = zones.map((z,i) =>
+        '<span style="color:'+z.color+'">'+z.name+': '+Math.round(counts[i]/total*100)+'%</span>'
+      ).join(' · ');
+    }
+
+    // Streams stats
+    if (data.speed?.length || data.cadence?.length || data.power?.length) {
+      document.getElementById('streams-section').style.display = 'block';
+      const streamStats = [];
+      if (data.speed?.length) {
+        const avgSpd = data.speed.filter(v=>v>0).reduce((a,b)=>a+b,0) / data.speed.filter(v=>v>0).length;
+        streamStats.push({ val: avgSpd.toFixed(1)+' km/h', lbl: 'Avg speed' });
+        streamStats.push({ val: Math.max(...data.speed).toFixed(1)+' km/h', lbl: 'Max speed' });
+      }
+      if (data.cadence?.length) {
+        const avgCad = Math.round(data.cadence.filter(v=>v>0).reduce((a,b)=>a+b,0)/data.cadence.filter(v=>v>0).length);
+        streamStats.push({ val: avgCad+' rpm', lbl: 'Avg cadence' });
+      }
+      if (data.power?.length) {
+        const avgPwr = Math.round(data.power.filter(v=>v>0).reduce((a,b)=>a+b,0)/data.power.filter(v=>v>0).length);
+        const maxPwr = Math.max(...data.power);
+        streamStats.push({ val: avgPwr+'W', lbl: 'Avg power' });
+        streamStats.push({ val: maxPwr+'W', lbl: 'Max power' });
+      }
+      document.getElementById('streams-stats').innerHTML = streamStats.map(s =>
+        '<div class="modal-stat"><div class="val">'+s.val+'</div><div class="lbl">'+s.lbl+'</div></div>'
+      ).join('');
+    }
+
+  } catch(e) {
+    document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">Error loading route: '+e.message+'</div>';
+  }
 }
 
 async function syncStrava() {
@@ -1896,10 +1950,10 @@ function updateDashboard(rides) {
   if (outdoor.length && userProfile?.goal_date) {
     const bestDist = Math.max(...outdoor.map(getRideDist));
     const targetDist = userProfile.goal_type === 'century' ? 100000 : 122000;
-    const bestElev = Math.max(...outdoor.map(r => getRideElev(r.workout_summary || r)));
+    const bestElev = Math.max(...outdoor.map(r => getRideElev(r)));
     const targetElev = userProfile.goal_type === 'uci_qualifier' ? 1869 : 1200;
-    const longOutdoor = outdoor.filter(r => getRideDist(r.workout_summary || r) > 50000);
-    const bestTime = longOutdoor.length ? Math.max(...longOutdoor.map(r => getRideTime(r.workout_summary || r))) : 0;
+    const longOutdoor = outdoor.filter(r => getRideDist(r) > 50000);
+    const bestTime = longOutdoor.length ? Math.max(...longOutdoor.map(r => getRideTime(r))) : 0;
     const targetTime = 270 * 60; // 4h 30min in seconds
 
     const goalPassed = userProfile?.goal_date && new Date(userProfile.goal_date) < new Date();
@@ -1915,7 +1969,8 @@ function updateDashboard(rides) {
       p2 = Math.min(Math.round(bestElev/targetElev*85), 90);
       p3 = Math.min(Math.round(bestTime/targetTime*90), 90);
       const targetFTP = userProfile?.goal_type === 'uci_qualifier' ? 250 : 220;
-      const ftpPct = Math.min(Math.round(cappedFTP / targetFTP * 100), 95);
+      const currentFTP = userProfile?.ftp || ftp || 200;
+      const ftpPct = Math.min(Math.round(currentFTP / targetFTP * 100), 95);
       p4 = Math.min(Math.round((p1+p2+p3+ftpPct)/4*0.85), 95);
     }
 
