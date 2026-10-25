@@ -1743,6 +1743,7 @@ async function openWahooRide(id) {
 
   // Fetch individual workout detail to get file.url (not included in list endpoint)
   let fitUrl = ride.file?.url || s.file?.url;
+  console.log('[VAMIQ] ride.file:', ride.file, 's.file:', s.file, 'fitUrl so far:', fitUrl);
   if (!fitUrl) {
     try {
       const detailParams = new URLSearchParams({
@@ -1753,20 +1754,29 @@ async function openWahooRide(id) {
       });
       const detailRes = await fetch('/api/wahoo?' + detailParams);
       const detail = await detailRes.json();
+      console.log('[VAMIQ] workout detail:', JSON.stringify(detail).substring(0, 500));
       fitUrl = detail.file?.url;
-    } catch(e) {}
+      console.log('[VAMIQ] fitUrl from detail:', fitUrl);
+    } catch(e) { console.error('[VAMIQ] detail fetch error:', e); }
   }
 
-  if (!fitUrl || ride.workout_type_id === 12) {
-    document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">' + (ride.workout_type_id === 12 ? 'Indoor ride — no GPS' : 'No route data available') + '</div>';
-    if (ride.workout_type_id !== 12) return;
+  if (ride.workout_type_id === 12) {
+    document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">Indoor ride — no GPS</div>';
+    return;
+  }
+
+  if (!fitUrl) {
+    document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">No route data available</div>';
     return;
   }
 
   try {
+    console.log('[VAMIQ] fetching FIT from:', fitUrl.substring(0, 100));
     const params = new URLSearchParams({ fit_url: fitUrl });
     const r = await fetch('/api/wahoo-fit?' + params);
+    console.log('[VAMIQ] wahoo-fit response status:', r.status);
     const data = await r.json();
+    console.log('[VAMIQ] wahoo-fit data keys:', Object.keys(data), 'latlng count:', data.latlng?.length);
 
     if (data.error) {
       document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">'+data.error+'</div>';
