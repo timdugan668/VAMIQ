@@ -77,17 +77,32 @@ function parseFIT(bytes) {
       // Global message 20 = GPS record
       if (def.globalMsgNum === 20) {
         if (msgData[0] !== undefined && msgData[1] !== undefined) {
-          const lat = msgData[0] * (180 / 2147483648);
-          const lon = msgData[1] * (180 / 2147483648);
-          if (Math.abs(lat) > 0.001 && Math.abs(lon) > 0.001 && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+          // GPS stored as signed 32-bit semicircles — convert to signed before multiplying
+          const latRaw = toSigned32(msgData[0]);
+          const lonRaw = toSigned32(msgData[1]);
+          const lat = latRaw * (180 / 2147483648);
+          const lon = lonRaw * (180 / 2147483648);
+          // Valid GPS: exclude invalid/zero readings, allow negative lat/lon (southern/western hemisphere)
+          if (latRaw !== 0x7FFFFFFF && lonRaw !== 0x7FFFFFFF &&
+              Math.abs(lat) >= 0.001 && Math.abs(lon) >= 0.001 &&
+              Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
             latlng.push([parseFloat(lat.toFixed(6)), parseFloat(lon.toFixed(6))]);
           }
         }
-        if (msgData[2] !== undefined && msgData[2] < 0xFFFF) altitude.push(parseFloat((msgData[2] / 5 - 500).toFixed(1)));
-        if (msgData[3] !== undefined && msgData[3] < 255) heartrate.push(msgData[3]);
-        if (msgData[4] !== undefined && msgData[4] < 255) cadence.push(msgData[4]);
-        if (msgData[7] !== undefined && msgData[7] < 0xFFFF) power.push(msgData[7]);
-        if (msgData[6] !== undefined && msgData[6] < 0xFFFF) speed.push(parseFloat((msgData[6] * 0.0036).toFixed(1)));
+        // altitude: unsigned 16-bit, scaled — 0xFFFF = invalid
+        if (msgData[2] !== undefined && msgData[2] !== 0xFFFF) {
+          altitude.push(parseFloat((msgData[2] / 5 - 500).toFixed(1)));
+        }
+        // heartrate: unsigned 8-bit, 0xFF = invalid
+        if (msgData[3] !== undefined && msgData[3] !== 0xFF) heartrate.push(msgData[3]);
+        // cadence: unsigned 8-bit, 0xFF = invalid
+        if (msgData[4] !== undefined && msgData[4] !== 0xFF) cadence.push(msgData[4]);
+        // power: unsigned 16-bit, 0xFFFF = invalid
+        if (msgData[7] !== undefined && msgData[7] !== 0xFFFF) power.push(msgData[7]);
+        // speed: unsigned 16-bit mm/s → km/h, 0xFFFF = invalid
+        if (msgData[6] !== undefined && msgData[6] !== 0xFFFF) {
+          speed.push(parseFloat((msgData[6] * 0.0036).toFixed(1)));
+        }
       }
     }
   }
@@ -95,14 +110,21 @@ function parseFIT(bytes) {
   return { latlng, altitude, heartrate, cadence, power, speed };
 }
 
+// Convert unsigned 32-bit to signed 32-bit (two's complement)
+function toSigned32(n) {
+  return n > 0x7FFFFFFF ? n - 0x100000000 : n;
+}
+
 function readField(bytes, pos, size, arch) {
   if (size === 1) return bytes[pos];
-  if (size === 2) return arch === 0 ? bytes[pos] | (bytes[pos+1]<<8) : (bytes[pos]<<8) | bytes[pos+1];
+  if (size === 2) return arch === 0
+    ? bytes[pos] | (bytes[pos+1]<<8)
+    : (bytes[pos]<<8) | bytes[pos+1];
   if (size === 4) {
-    const v = arch === 0
-      ? bytes[pos] | (bytes[pos+1]<<8) | (bytes[pos+2]<<16) | (bytes[pos+3]<<24)
-      : (bytes[pos]<<24) | (bytes[pos+1]<<16) | (bytes[pos+2]<<8) | bytes[pos+3];
-    return v >>> 0; // unsigned
+    // Return raw unsigned — toSigned32() is applied where needed (lat/lon)
+    return arch === 0
+      ? ((bytes[pos]) | (bytes[pos+1]<<8) | (bytes[pos+2]<<16) | (bytes[pos+3]<<24)) >>> 0
+      : ((bytes[pos]<<24) | (bytes[pos+1]<<16) | (bytes[pos+2]<<8) | bytes[pos+3]) >>> 0;
   }
   return 0;
 }
