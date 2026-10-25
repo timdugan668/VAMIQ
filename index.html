@@ -1696,6 +1696,9 @@ async function openWahooRide(id) {
   const ride = (window.wahooWorkouts || []).find(w => String(w.id) === String(id));
   if (!ride) return;
 
+  // Clear any previous Strava ride so Ask Coach uses Wahoo context
+  currentRideData = null;
+
   const s = ride.workout_summary || {};
   const isIndoor = ride.workout_type_id === 12;
   const km = s.distance_accum ? (parseFloat(s.distance_accum)/1000).toFixed(1) : '—';
@@ -1738,18 +1741,30 @@ async function openWahooRide(id) {
   // Set coach context
   window.CURRENT_RIDE_CONTEXT = 'Wahoo ride: '+ride.name+', '+date+', Duration: '+duration+(isIndoor?', Indoor trainer':', Distance: '+km+'km, Elevation: '+elev+'m')+', Avg HR: '+hr+' bpm, Cadence: '+cad+' rpm, Calories: '+cal+' kcal'+(power?', Avg power: '+power+'W':'');
 
-  // Fetch FIT file for GPS + streams
-  const fitUrl = s.file?.url;
+  // Fetch individual workout detail to get file.url (not included in list endpoint)
+  let fitUrl = ride.file?.url || s.file?.url;
   if (!fitUrl) {
-    document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">No route data available</div>';
+    try {
+      const detailParams = new URLSearchParams({
+        access_token: userProfile.wahoo_access_token,
+        refresh_token: userProfile.wahoo_refresh_token || '',
+        mode: 'workout',
+        workout_id: id
+      });
+      const detailRes = await fetch('/api/wahoo?' + detailParams);
+      const detail = await detailRes.json();
+      fitUrl = detail.file?.url;
+    } catch(e) {}
+  }
+
+  if (!fitUrl || ride.workout_type_id === 12) {
+    document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">' + (ride.workout_type_id === 12 ? 'Indoor ride — no GPS' : 'No route data available') + '</div>';
+    if (ride.workout_type_id !== 12) return;
     return;
   }
 
   try {
-    const params = new URLSearchParams({
-      fit_url: fitUrl,
-      access_token: userProfile.wahoo_access_token
-    });
+    const params = new URLSearchParams({ fit_url: fitUrl });
     const r = await fetch('/api/wahoo-fit?' + params);
     const data = await r.json();
 
