@@ -107,7 +107,12 @@ function parseFIT(bytes) {
     }
   }
 
-  return { latlng, altitude, heartrate, cadence, power, speed };
+  return { latlng, altitude, heartrate, cadence, power, speed, _debug: {
+    totalBytes: bytes.length,
+    msgTypeCounts: Object.fromEntries(
+      Object.entries(localMsgDefs).map(([k,v]) => [k, `global=${v.globalMsgNum} fields=${v.fields.length}`])
+    )
+  }};
 }
 
 // Convert unsigned 32-bit to signed 32-bit (two's complement)
