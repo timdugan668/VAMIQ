@@ -3,299 +3,162 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VAMIQ — AI Cycling Coach</title>
-<meta name="description" content="AI-powered cycling coach for UCI Gran Fondo qualifiers. Connect your Strava, set your goal, get personalised coaching.">
+<title>VAMIQ — Join the Crew</title>
+<meta name="description" content="AI-powered cycling coach for serious riders chasing UCI Gran Fondo qualifiers.">
 <meta name="theme-color" content="#E8500A">
-<meta property="og:title" content="VAMIQ — AI Cycling Coach">
-<meta property="og:description" content="Personalised AI coaching for cyclists. Connect Strava, set your goal, get coached.">
-<meta property="og:image" content="https://vamiq.au/og-image.png">
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@700&display=swap" rel="stylesheet">
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --black: #0E0F0D; --asphalt: #1C1E1A; --gravel: #2E3029;
-  --mist: #8A9080; --fog: #C4CBB8; --white: #F2F4EE;
-  --orange: #E8500A; --orange-lo: #3A1A08; --orange-hi: #FF7A40;
-  --green: #4CAF7D; --green-lo: #0D2B1C;
-  --r: 10px; --font-head: 'Rajdhani', Georgia, serif; --font-body: 'Helvetica Neue', Arial, sans-serif;
+  --black:#0E0F0D; --asphalt:#1C1E1A; --gravel:#2E3029;
+  --mist:#8A9080; --fog:#C4CBB8; --white:#F2F4EE;
+  --orange:#E8500A; --orange-lo:#3A1A08; --orange-hi:#FF7A40;
+  --green:#4CAF7D; --green-lo:#0D2B1C;
+  --font-head:'Rajdhani',Georgia,serif; --font-body:'Helvetica Neue',Arial,sans-serif;
+  --r:8px;
 }
-body { background: var(--black); color: var(--white); font-family: var(--font-body); font-size: 15px; line-height: 1.6; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--black); color:var(--white); font-family:var(--font-body); font-size:15px; line-height:1.6; min-height:100vh; }
 
-/* NAV */
-nav { display: flex; align-items: center; padding: 1rem 2rem; border-bottom: 1px solid var(--gravel); position: sticky; top: 0; background: var(--black); z-index: 100; }
-.nav-logo { font-family: var(--font-head); font-size: 22px; font-weight: bold; letter-spacing: 3px; color: var(--orange); }
-.nav-right { margin-left: auto; display: flex; gap: 10px; }
-.btn-ghost { padding: 8px 16px; border: 1px solid var(--gravel); border-radius: var(--r); color: var(--fog); font-size: 13px; cursor: pointer; background: none; text-decoration: none; display: inline-flex; align-items: center; }
-.btn-ghost:hover { border-color: var(--orange); color: var(--orange); }
-.btn-cta { padding: 8px 18px; background: var(--orange); border: none; border-radius: var(--r); color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
-.btn-cta:hover { opacity: 0.88; }
-
-/* HERO */
-.hero { max-width: 800px; margin: 0 auto; padding: 5rem 2rem 4rem; text-align: center; }
-.hero-badge { display: inline-block; background: var(--orange-lo); border: 1px solid #5A2010; color: var(--orange-hi); font-size: 12px; padding: 4px 14px; border-radius: 20px; margin-bottom: 1.5rem; letter-spacing: 0.05em; }
-.hero h1 { font-family: var(--font-head); font-size: clamp(36px, 7vw, 64px); font-weight: normal; letter-spacing: -1px; margin-bottom: 1.25rem; line-height: 1.1; }
-.hero h1 span { color: var(--orange); }
-.hero p { font-size: 18px; color: var(--fog); max-width: 560px; margin: 0 auto 2.5rem; line-height: 1.7; }
-.hero-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-.btn-hero { padding: 14px 28px; border-radius: var(--r); font-size: 15px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
-.btn-hero-primary { background: var(--orange); color: #fff; border: none; }
-.btn-hero-primary:hover { opacity: 0.88; }
-.btn-hero-secondary { background: none; border: 1px solid var(--gravel); color: var(--fog); }
-.btn-hero-secondary:hover { border-color: var(--orange); color: var(--orange); }
-
-/* STATS */
-.stats { display: flex; justify-content: center; gap: 3rem; padding: 3rem 2rem; border-top: 1px solid var(--gravel); border-bottom: 1px solid var(--gravel); flex-wrap: wrap; }
-.stat { text-align: center; }
-.stat .num { font-family: var(--font-head); font-size: 36px; color: var(--orange); font-weight: bold; }
-.stat .label { font-size: 13px; color: var(--mist); margin-top: 4px; }
-
-/* FEATURES */
-.features { max-width: 900px; margin: 0 auto; padding: 5rem 2rem; }
-.section-label { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--orange); margin-bottom: 1rem; }
-.section-title { font-family: var(--font-head); font-size: clamp(28px, 5vw, 42px); font-weight: normal; margin-bottom: 1rem; letter-spacing: -0.5px; }
-.section-desc { font-size: 16px; color: var(--fog); max-width: 560px; margin-bottom: 3rem; }
-.feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-.feature-card { background: var(--asphalt); border: 1px solid var(--gravel); border-radius: 12px; padding: 1.5rem; }
-.feature-icon { font-size: 28px; margin-bottom: 0.75rem; }
-.feature-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
-.feature-desc { font-size: 13px; color: var(--mist); line-height: 1.6; }
-
-/* HOW IT WORKS */
-.how { background: var(--asphalt); padding: 5rem 2rem; }
-.how-inner { max-width: 800px; margin: 0 auto; }
-.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 2rem; margin-top: 3rem; }
-.step { text-align: center; }
-.step-num { width: 44px; height: 44px; border-radius: 50%; background: var(--orange-lo); border: 1px solid #5A2010; color: var(--orange); font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem; }
-.step-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
-.step-desc { font-size: 13px; color: var(--mist); line-height: 1.5; }
-
-/* GOALS */
-.goals { max-width: 900px; margin: 0 auto; padding: 5rem 2rem; }
-.goal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 2rem; }
-.goal-card { background: var(--asphalt); border: 1px solid var(--gravel); border-radius: 12px; padding: 1.25rem; }
-.goal-icon { font-size: 28px; margin-bottom: 0.5rem; }
-.goal-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
-.goal-desc { font-size: 12px; color: var(--mist); }
-
-/* SECURITY */
-.security { background: var(--asphalt); padding: 5rem 2rem; }
-.security-inner { max-width: 800px; margin: 0 auto; }
-.security-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 2rem; }
-.security-item { display: flex; gap: 12px; align-items: flex-start; padding: 1rem; background: var(--black); border-radius: var(--r); border: 1px solid var(--gravel); }
-.security-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
-.security-text .title { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
-.security-text .desc { font-size: 12px; color: var(--mist); line-height: 1.5; }
-
-/* CTA */
-.cta { max-width: 600px; margin: 0 auto; padding: 5rem 2rem; text-align: center; }
-.cta h2 { font-family: var(--font-head); font-size: clamp(28px, 5vw, 42px); font-weight: normal; margin-bottom: 1rem; }
-.cta p { font-size: 16px; color: var(--fog); margin-bottom: 2rem; }
-.cta-beta { font-size: 12px; color: var(--mist); margin-top: 1rem; }
-
-/* FOOTER */
-footer { border-top: 1px solid var(--gravel); padding: 2rem; text-align: center; font-size: 12px; color: var(--mist); }
-footer a { color: var(--mist); text-decoration: none; }
-footer a:hover { color: var(--orange); }
-
-@media (max-width: 600px) {
-  nav { padding: 1rem; }
-  .hero { padding: 3rem 1.25rem; }
-  .stats { gap: 1.5rem; }
-  .features, .goals, .cta { padding: 3rem 1.25rem; }
-  .how, .security { padding: 3rem 1.25rem; }
+.hero {
+  background: linear-gradient(160deg, #1C0A02 0%, var(--black) 60%);
+  border-bottom: 1px solid var(--gravel);
+  padding: 3rem 1.5rem 2.5rem;
+  text-align: center;
 }
+.logo { font-family:var(--font-head); font-size:42px; font-weight:bold; letter-spacing:8px; color:var(--orange); margin-bottom:6px; }
+.tagline { font-size:13px; color:var(--mist); letter-spacing:3px; text-transform:uppercase; margin-bottom:2rem; }
+.hero-title { font-size:clamp(22px,5vw,32px); font-weight:700; line-height:1.25; max-width:520px; margin:0 auto 1rem; }
+.hero-title span { color:var(--orange); }
+.hero-sub { font-size:14px; color:var(--fog); max-width:420px; margin:0 auto 2rem; }
+
+.cta-btn {
+  display:inline-block; background:var(--orange); color:#fff; font-size:16px; font-weight:700;
+  padding:14px 36px; border-radius:var(--r); text-decoration:none; letter-spacing:0.03em;
+  transition:opacity 0.15s;
+}
+.cta-btn:hover { opacity:0.88; }
+
+.section { max-width:640px; margin:0 auto; padding:2.5rem 1.5rem; }
+.section-title { font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--mist); margin-bottom:1.25rem; }
+
+.features { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:2.5rem; }
+.feat { background:var(--asphalt); border:1px solid var(--gravel); border-radius:12px; padding:1.1rem 1rem; }
+.feat-icon { font-size:24px; margin-bottom:8px; }
+.feat-title { font-size:14px; font-weight:700; color:var(--white); margin-bottom:4px; }
+.feat-desc { font-size:12px; color:var(--mist); line-height:1.5; }
+
+.quote-block {
+  background:var(--orange-lo); border:1px solid #5A2010; border-radius:12px;
+  padding:1.25rem 1.25rem 1rem; margin-bottom:2rem;
+}
+.quote-text { font-size:15px; color:var(--fog); line-height:1.6; font-style:italic; margin-bottom:0.75rem; }
+.quote-attr { font-size:12px; color:var(--orange-hi); font-weight:600; }
+
+.steps { counter-reset:step; }
+.step { display:flex; gap:14px; padding:12px 0; border-bottom:1px solid var(--gravel); }
+.step:last-child { border-bottom:none; }
+.step-num {
+  width:28px; height:28px; border-radius:50%; background:var(--orange-lo); border:1px solid #5A2010;
+  color:var(--orange-hi); font-size:12px; font-weight:700; display:flex; align-items:center;
+  justify-content:center; flex-shrink:0; margin-top:2px;
+}
+.step-body { flex:1; }
+.step-title { font-size:14px; font-weight:600; color:var(--white); margin-bottom:3px; }
+.step-desc { font-size:12px; color:var(--mist); line-height:1.5; }
+
+.cta-section {
+  background:var(--asphalt); border-top:1px solid var(--gravel); border-bottom:1px solid var(--gravel);
+  padding:2.5rem 1.5rem; text-align:center;
+}
+.cta-section h2 { font-size:20px; font-weight:700; margin-bottom:8px; }
+.cta-section p { font-size:13px; color:var(--mist); margin-bottom:1.5rem; }
+
+.footer { text-align:center; padding:1.5rem; font-size:11px; color:var(--mist); }
+.footer a { color:var(--mist); }
 </style>
 </head>
 <body>
 
-<nav>
-  <div class="nav-logo">VAMIQ</div>
-  <div class="nav-right">
-    <a href="/index.html" class="btn-ghost">Sign in</a>
-    <a href="/index.html" class="btn-cta">Get started →</a>
-  </div>
-</nav>
-
-<section class="hero">
-  <div class="hero-badge">🚴 Now in beta — free to join</div>
-  <h1>Train smarter.<br>Race <span>faster.</span></h1>
-  <p>VAMIQ is an AI cycling coach that connects to your Strava, analyses your rides, and builds a personalised training plan to get you to your goal.</p>
-  <div class="hero-btns">
-    <a href="/index.html" class="btn-hero btn-hero-primary">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
-      Start free with Strava
-    </a>
-    <a href="#how" class="btn-hero btn-hero-secondary">How it works ↓</a>
-  </div>
-</section>
-
-<div class="stats">
-  <div class="stat"><div class="num">AI</div><div class="label">Powered coaching</div></div>
-  <div class="stat"><div class="num">6</div><div class="label">Training zones</div></div>
-  <div class="stat"><div class="num">7</div><div class="label">Day training plans</div></div>
-  <div class="stat"><div class="num">UCI</div><div class="label">Gran Fondo ready</div></div>
+<div class="hero">
+  <div class="logo">VAMIQ</div>
+  <div class="tagline">AI Cycling Coach</div>
+  <h1 class="hero-title">Train smarter.<br>Climb harder.<br><span>Qualify.</span></h1>
+  <p class="hero-sub">VAMIQ analyses your Wahoo rides and gives you personalised coaching — built for riders chasing UCI Gran Fondo qualifiers and serious events.</p>
+  <a href="/" class="cta-btn">Create your free account →</a>
 </div>
 
-<section class="features">
-  <div class="section-label">Features</div>
-  <div class="section-title">Everything you need to hit your goal</div>
-  <p class="section-desc">VAMIQ brings together your Strava data, your training goals and AI coaching into one simple app.</p>
-  <div class="feature-grid">
-    <div class="feature-card">
-      <div class="feature-icon">🔴</div>
-      <div class="feature-title">Strava sync</div>
-      <div class="feature-desc">Connects to your Strava account and analyses your recent rides to understand your current fitness.</div>
+<div class="section">
+  <p class="section-title">What you get</p>
+  <div class="features">
+    <div class="feat">
+      <div class="feat-icon">🗺️</div>
+      <div class="feat-title">Ride analysis</div>
+      <div class="feat-desc">Every Wahoo ride mapped with HR zones, elevation, and power data.</div>
     </div>
-    <div class="feature-card">
-      <div class="feature-icon">📊</div>
-      <div class="feature-title">Dynamic dashboard</div>
-      <div class="feature-desc">Live fitness metrics — estimated FTP, W/kg, best long ride, and goal readiness bars updated from your real ride data.</div>
+    <div class="feat">
+      <div class="feat-icon">🤖</div>
+      <div class="feat-title">AI coach</div>
+      <div class="feat-desc">Ask anything about your training, pacing, nutrition, and recovery.</div>
     </div>
-    <div class="feature-card">
-      <div class="feature-icon">📅</div>
-      <div class="feature-title">Personalised weekly plan</div>
-      <div class="feature-desc">A 7-day training plan with specific HR and power targets for each session, adapted to your goal and available hours.</div>
+    <div class="feat">
+      <div class="feat-icon">📈</div>
+      <div class="feat-title">Goal readiness</div>
+      <div class="feat-desc">Live tracking of your aerobic base, climbing capacity, and race pace readiness.</div>
     </div>
-    <div class="feature-card">
-      <div class="feature-icon">⚡</div>
-      <div class="feature-title">Training zones</div>
-      <div class="feature-desc">6-zone power and HR model calculated from your FTP. Know exactly how hard to go in every session.</div>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">🤖</div>
-      <div class="feature-title">AI coach chat</div>
-      <div class="feature-desc">Ask your coach anything — pacing strategy, nutrition, recovery, how to peak for race day. Powered by Claude AI.</div>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">🎯</div>
-      <div class="feature-title">Goal tracking</div>
-      <div class="feature-desc">Set your target event and date. VAMIQ counts down and adapts your plan as race day approaches.</div>
+    <div class="feat">
+      <div class="feat-icon">📅</div>
+      <div class="feat-title">Training plan</div>
+      <div class="feat-desc">Personalised weekly structure built around your target event and schedule.</div>
     </div>
   </div>
-</section>
 
-<section class="how" id="how">
-  <div class="how-inner">
-    <div class="section-label">How it works</div>
-    <div class="section-title">Up and running in minutes</div>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">1</div>
+  <div class="quote-block">
+    <div class="quote-text">"Qualified at Amy's Gran Fondo in 3h 56min. Now using VAMIQ to build toward UCI Worlds in France — it keeps me honest about where I actually am versus where I need to be."</div>
+    <div class="quote-attr">— Tim, 57, Advanced rider · 290W FTP</div>
+  </div>
+
+  <p class="section-title">How to get started</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
         <div class="step-title">Create your account</div>
-        <div class="step-desc">Sign up with email and password. Takes 30 seconds.</div>
+        <div class="step-desc">Sign up with your email — takes 30 seconds.</div>
       </div>
-      <div class="step">
-        <div class="step-num">2</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Connect Wahoo</div>
+        <div class="step-desc">Link your Wahoo ELEMNT in the Profile tab. Your rides sync automatically.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
         <div class="step-title">Set your goal</div>
-        <div class="step-desc">Tell VAMIQ your target event, date and how much time you have to train.</div>
+        <div class="step-desc">Tell the coach your target event, date, and what success looks like.</div>
       </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <div class="step-title">Connect Strava</div>
-        <div class="step-desc">VAMIQ reads your ride history to understand your current fitness and calibrate your plan.</div>
-      </div>
-      <div class="step">
-        <div class="step-num">4</div>
-        <div class="step-title">Start training</div>
-        <div class="step-desc">Get your personalised weekly plan, zones, and AI coaching. Sync after every ride to track progress.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Start training smarter</div>
+        <div class="step-desc">Open a ride, tap Ask Coach, and get advice based on your actual data.</div>
       </div>
     </div>
   </div>
-</section>
+</div>
 
-<section class="goals">
-  <div class="section-label">Goals</div>
-  <div class="section-title">Built for every cyclist</div>
-  <p class="section-desc">Whether you're chasing a UCI qualification or just want to get fitter, VAMIQ adapts to your goal.</p>
-  <div class="goal-grid">
-    <div class="goal-card">
-      <div class="goal-icon">🏆</div>
-      <div class="goal-name">UCI Gran Fondo Qualifier</div>
-      <div class="goal-desc">Qualify for the UCI Gran Fondo World Championships. Specialised pacing and climbing endurance training.</div>
-    </div>
-    <div class="goal-card">
-      <div class="goal-icon">🚴</div>
-      <div class="goal-name">Gran Fondo</div>
-      <div class="goal-desc">Complete or podium at a gran fondo event. Build the endurance and climbing capacity you need.</div>
-    </div>
-    <div class="goal-card">
-      <div class="goal-icon">💪</div>
-      <div class="goal-name">General Fitness</div>
-      <div class="goal-desc">Get fitter, lose weight, ride stronger. Structured training that works around your life.</div>
-    </div>
-    <div class="goal-card">
-      <div class="goal-icon">🎯</div>
-      <div class="goal-name">Century Ride</div>
-      <div class="goal-desc">Complete your first 100 km+ ride. Build up safely with a progressive training plan.</div>
-    </div>
-  </div>
-</section>
+<div class="cta-section">
+  <h2>Ready to train with purpose?</h2>
+  <p>Free to use. No credit card. Just connect your Wahoo and go.</p>
+  <a href="/" class="cta-btn">Get started →</a>
+</div>
 
-<section class="security">
-  <div class="security-inner">
-    <div class="section-label">Security & Privacy</div>
-    <div class="section-title">Your data is safe</div>
-    <p class="section-desc" style="color:var(--fog);margin-top:0.5rem">VAMIQ is built with security first. Your ride data and personal information are private and protected.</p>
-    <div class="security-grid">
-      <div class="security-item">
-        <div class="security-icon">🔒</div>
-        <div class="security-text">
-          <div class="title">Encrypted passwords</div>
-          <div class="desc">Passwords are hashed with bcrypt and never stored in plain text.</div>
-        </div>
-      </div>
-      <div class="security-item">
-        <div class="security-icon">🛡️</div>
-        <div class="security-text">
-          <div class="title">Private by design</div>
-          <div class="desc">Row Level Security ensures you can only ever see your own data.</div>
-        </div>
-      </div>
-      <div class="security-item">
-        <div class="security-icon">🔑</div>
-        <div class="security-text">
-          <div class="title">Secure API keys</div>
-          <div class="desc">All API keys live on secure servers — never exposed in the browser.</div>
-        </div>
-      </div>
-      <div class="security-item">
-        <div class="security-icon">🚦</div>
-        <div class="security-text">
-          <div class="title">Strava read-only</div>
-          <div class="desc">VAMIQ only reads your Strava data. We can never modify or post to your account.</div>
-        </div>
-      </div>
-      <div class="security-item">
-        <div class="security-icon">🌏</div>
-        <div class="security-text">
-          <div class="title">Hosted in Singapore</div>
-          <div class="desc">Data stored on Supabase AWS Singapore — close to Australian users, fast and reliable.</div>
-        </div>
-      </div>
-      <div class="security-item">
-        <div class="security-icon">🔐</div>
-        <div class="security-text">
-          <div class="title">HTTPS everywhere</div>
-          <div class="desc">All data transmitted over encrypted HTTPS connections.</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="cta">
-  <h2>Ready to ride smarter?</h2>
-  <p>Join the VAMIQ beta — free while we're building. Connect your Strava and get your personalised plan in minutes.</p>
-  <a href="/index.html" class="btn-hero btn-hero-primary" style="display:inline-flex;margin:0 auto">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
-    Get started free →
-  </a>
-  <div class="cta-beta">Beta version · Free to use · No credit card required</div>
-</section>
-
-<footer>
-  <p>© 2026 VAMIQ · <a href="/index.html">Sign in</a> · <a href="mailto:hello@vamiq.au">hello@vamiq.au</a> · Built in Australia 🇦🇺</p>
-</footer>
+<div class="footer">
+  <p>© 2026 VAMIQ · <a href="/">Back to app</a></p>
+</div>
 
 </body>
 </html>
