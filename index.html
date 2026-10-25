@@ -1822,11 +1822,18 @@ async function openWahooRide(id) {
       return;
     }
 
-    // Update coach context with real max HR from FIT file (Wahoo doesn't put it in workout_summary)
+    // Update coach context and modal Max HR tile from FIT file (Wahoo doesn't put max HR in workout_summary)
     if (data.heartrate?.length > 0) {
       const fitMaxHR = Math.max(...data.heartrate);
       window.CURRENT_RIDE_CONTEXT = 'Wahoo ride: '+ride.name+', '+date+', Duration: '+duration+(isIndoor?', Indoor trainer':', Distance: '+km+'km, Elevation: '+elev+'m')+', Avg HR: '+hr+' bpm, Max HR: '+fitMaxHR+' bpm, Cadence: '+cad+' rpm, Calories: '+cal+' kcal'+(power?', Avg power: '+power+'W':'');
       console.log('[VAMIQ] Updated coach context with FIT max HR:', fitMaxHR);
+      // Update the Max HR tile in the modal (was showing — before FIT loaded)
+      const maxHRTiles = document.querySelectorAll('#modal-stats .modal-stat');
+      maxHRTiles.forEach(tile => {
+        if (tile.querySelector('.lbl')?.textContent === 'Max HR') {
+          tile.querySelector('.val').textContent = fitMaxHR + ' bpm';
+        }
+      });
     }
 
     // Route map
