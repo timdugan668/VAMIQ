@@ -1739,7 +1739,7 @@ async function openWahooRide(id) {
   document.getElementById('streams-section').style.display = 'none';
 
   // Set coach context
-  window.CURRENT_RIDE_CONTEXT = 'Wahoo ride: '+ride.name+', '+date+', Duration: '+duration+(isIndoor?', Indoor trainer':', Distance: '+km+'km, Elevation: '+elev+'m')+', Avg HR: '+hr+' bpm, Cadence: '+cad+' rpm, Calories: '+cal+' kcal'+(power?', Avg power: '+power+'W':'');
+  window.CURRENT_RIDE_CONTEXT = 'Wahoo ride: '+ride.name+', '+date+', Duration: '+duration+(isIndoor?', Indoor trainer':', Distance: '+km+'km, Elevation: '+elev+'m')+', Avg HR: '+hr+' bpm'+(maxHR?', Max HR: '+maxHR+' bpm':'')+', Cadence: '+cad+' rpm, Calories: '+cal+' kcal'+(power?', Avg power: '+power+'W':'');
 
   // Fetch individual workout detail to get file.url (not included in list endpoint)
   let fitUrl = ride.file?.url || s.file?.url;
