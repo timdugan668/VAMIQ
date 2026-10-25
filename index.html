@@ -1744,7 +1744,8 @@ async function openWahooRide(id) {
   const mins = s.duration_active_accum ? Math.round(parseFloat(s.duration_active_accum)/60) : 0;
   const duration = mins >= 60 ? Math.floor(mins/60)+'h '+(mins%60)+'m' : mins+'m';
   const hr = s.heart_rate_avg ? Math.round(parseFloat(s.heart_rate_avg)) : 0;
-  const maxHR = s.heart_rate_max ? Math.round(parseFloat(s.heart_rate_max)) : 0;
+  const maxHR = s.heart_rate_max ? Math.round(parseFloat(s.heart_rate_max)) : (s.max_heart_rate ? Math.round(parseFloat(s.max_heart_rate)) : 0);
+  console.log('[VAMIQ] HR fields — heart_rate_avg:', s.heart_rate_avg, 'heart_rate_max:', s.heart_rate_max, 'max_heart_rate:', s.max_heart_rate, '→ maxHR:', maxHR);
   const cad = s.cadence_avg ? Math.round(parseFloat(s.cadence_avg)) : 0;
   const cal = s.calories_accum ? Math.round(parseFloat(s.calories_accum)) : 0;
   const power = s.power_avg ? Math.round(parseFloat(s.power_avg)) : 0;
