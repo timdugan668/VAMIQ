@@ -34,18 +34,52 @@ function parseFIT(bytes) {
   const endPos = headerSize + dataSize;
   const localMsgDefs = {};
 
+  function processRecord(def, msgData) {
+    if (def.globalMsgNum !== 20) return;
+    // Fields: 0=lat, 1=lon (signed 32-bit semicircles)
+    if (msgData[0] !== undefined && msgData[1] !== undefined) {
+      const latRaw = toSigned32(msgData[0]);
+      const lonRaw = toSigned32(msgData[1]);
+      if (latRaw !== 0x7FFFFFFF && lonRaw !== 0x7FFFFFFF) {
+        const lat = latRaw * (180 / 2147483648);
+        const lon = lonRaw * (180 / 2147483648);
+        if (Math.abs(lat) >= 0.001 && Math.abs(lat) <= 90 &&
+            Math.abs(lon) >= 0.001 && Math.abs(lon) <= 180) {
+          latlng.push([parseFloat(lat.toFixed(6)), parseFloat(lon.toFixed(6))]);
+        }
+      }
+    }
+    // Field 2 = altitude (uint16, scale 5, offset 500)
+    if (msgData[2] !== undefined && msgData[2] !== 0xFFFF)
+      altitude.push(parseFloat((msgData[2] / 5 - 500).toFixed(1)));
+    // Field 3 = heart_rate (uint8)
+    if (msgData[3] !== undefined && msgData[3] !== 0xFF) heartrate.push(msgData[3]);
+    // Field 4 = cadence (uint8)
+    if (msgData[4] !== undefined && msgData[4] !== 0xFF) cadence.push(msgData[4]);
+    // Field 6 = speed (uint16, mm/s → km/h)
+    if (msgData[6] !== undefined && msgData[6] !== 0xFFFF)
+      speed.push(parseFloat((msgData[6] * 0.0036).toFixed(1)));
+    // Field 7 = power (uint16)
+    if (msgData[7] !== undefined && msgData[7] !== 0xFFFF) power.push(msgData[7]);
+  }
+
   while (pos < endPos && pos < bytes.length - 1) {
     const recordHeader = bytes[pos++];
 
-    // Bit 7: compressed timestamp record (data record with embedded timestamp)
+    // Bit 7 set = compressed timestamp record
+    // bits 5-4 = local message type (within 0-3), bits 3-0 = time offset
     if (recordHeader & 0x80) {
       const localMsgType = (recordHeader >> 5) & 0x03;
       const def = localMsgDefs[localMsgType];
       if (!def) continue;
-      // Skip all fields for this message
-      let skipBytes = 0;
-      for (const f of def.fields) skipBytes += f.size;
-      pos += skipBytes;
+      // Read all fields just like a normal data record
+      const msgData = {};
+      for (const field of def.fields) {
+        if (pos + field.size > bytes.length) break;
+        msgData[field.num] = readField(bytes, pos, field.size, def.arch);
+        pos += field.size;
+      }
+      processRecord(def, msgData);
       continue;
     }
 
@@ -66,7 +100,7 @@ function parseFIT(bytes) {
         fields.push({ num: bytes[pos++], size: bytes[pos++], type: bytes[pos++] });
       }
       localMsgDefs[localMsgType] = { globalMsgNum, arch, fields };
-      // Developer fields (bit 5 set)
+      // Developer fields (bit 5 set in header)
       if (recordHeader & 0x20) {
         if (pos < bytes.length) {
           const numDevFields = bytes[pos++];
@@ -77,45 +111,13 @@ function parseFIT(bytes) {
       // Normal data record
       const def = localMsgDefs[localMsgType];
       if (!def) continue;
-
       const msgData = {};
       for (const field of def.fields) {
         if (pos + field.size > bytes.length) break;
         msgData[field.num] = readField(bytes, pos, field.size, def.arch);
         pos += field.size;
       }
-
-      // Global message 20 = record (GPS + metrics)
-      if (def.globalMsgNum === 20) {
-        // Fields 0=lat, 1=lon (signed 32-bit semicircles)
-        if (msgData[0] !== undefined && msgData[1] !== undefined) {
-          const latRaw = toSigned32(msgData[0]);
-          const lonRaw = toSigned32(msgData[1]);
-          // 0x7FFFFFFF = invalid/missing value in FIT
-          if (latRaw !== 0x7FFFFFFF && lonRaw !== 0x7FFFFFFF) {
-            const lat = latRaw * (180 / 2147483648);
-            const lon = lonRaw * (180 / 2147483648);
-            if (Math.abs(lat) >= 0.001 && Math.abs(lat) <= 90 &&
-                Math.abs(lon) >= 0.001 && Math.abs(lon) <= 180) {
-              latlng.push([parseFloat(lat.toFixed(6)), parseFloat(lon.toFixed(6))]);
-            }
-          }
-        }
-        // Field 2 = altitude (uint16, scale 5, offset 500)
-        if (msgData[2] !== undefined && msgData[2] !== 0xFFFF) {
-          altitude.push(parseFloat((msgData[2] / 5 - 500).toFixed(1)));
-        }
-        // Field 3 = heart_rate (uint8)
-        if (msgData[3] !== undefined && msgData[3] !== 0xFF) heartrate.push(msgData[3]);
-        // Field 4 = cadence (uint8)
-        if (msgData[4] !== undefined && msgData[4] !== 0xFF) cadence.push(msgData[4]);
-        // Field 6 = speed (uint16, mm/s → km/h via * 0.0036)
-        if (msgData[6] !== undefined && msgData[6] !== 0xFFFF) {
-          speed.push(parseFloat((msgData[6] * 0.0036).toFixed(1)));
-        }
-        // Field 7 = power (uint16)
-        if (msgData[7] !== undefined && msgData[7] !== 0xFFFF) power.push(msgData[7]);
-      }
+      processRecord(def, msgData);
     }
   }
 
