@@ -1,1 +1,7 @@
-{}
+{
+  "functions": {
+    "api/wahoo-fit.js": {
+      "maxDuration": 30
+    }
+  }
+}
