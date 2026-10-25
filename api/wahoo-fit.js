@@ -22,11 +22,11 @@ function parseFIT(bytes) {
   const latlng = [], altitude = [], heartrate = [], cadence = [], power = [], speed = [];
 
   const headerSize = bytes[0];
-  if (headerSize < 12) return { latlng, altitude, heartrate, cadence, power, speed };
+  if (headerSize < 12) return { latlng, altitude, heartrate, cadence, power, speed, _d: 'bad header size: ' + headerSize };
 
-  // Check .FIT signature at bytes 8-11
-  if (bytes[8] !== 0x2E || bytes[9] !== 0x46 || bytes[10] !== 0x49 || bytes[11] !== 0x54) {
-    return { error: 'Not a valid FIT file', latlng, altitude, heartrate, cadence, power, speed };
+  const sig = [bytes[8], bytes[9], bytes[10], bytes[11]];
+  if (sig[0] !== 0x2E || sig[1] !== 0x46 || sig[2] !== 0x49 || sig[3] !== 0x54) {
+    return { error: 'Not a valid FIT file', sig, latlng, altitude, heartrate, cadence, power, speed };
   }
 
   let pos = headerSize;
@@ -34,9 +34,15 @@ function parseFIT(bytes) {
   const endPos = headerSize + dataSize;
   const localMsgDefs = {};
 
+  // Debug: track first 50 record headers and what definitions we build
+  const debugHeaders = [];
+  const debugDefs = {};
+  let totalRecords = 0;
+  let gpsRecords = 0;
+
   function processRecord(def, msgData) {
     if (def.globalMsgNum !== 20) return;
-    // Fields: 0=lat, 1=lon (signed 32-bit semicircles)
+    gpsRecords++;
     if (msgData[0] !== undefined && msgData[1] !== undefined) {
       const latRaw = toSigned32(msgData[0]);
       const lonRaw = toSigned32(msgData[1]);
@@ -46,33 +52,34 @@ function parseFIT(bytes) {
         if (Math.abs(lat) >= 0.001 && Math.abs(lat) <= 90 &&
             Math.abs(lon) >= 0.001 && Math.abs(lon) <= 180) {
           latlng.push([parseFloat(lat.toFixed(6)), parseFloat(lon.toFixed(6))]);
+        } else {
+          // Log bad GPS values for debugging
+          if (gpsRecords <= 3) debugHeaders.push({badGps: true, latRaw, lonRaw, lat, lon});
         }
       }
     }
-    // Field 2 = altitude (uint16, scale 5, offset 500)
     if (msgData[2] !== undefined && msgData[2] !== 0xFFFF)
       altitude.push(parseFloat((msgData[2] / 5 - 500).toFixed(1)));
-    // Field 3 = heart_rate (uint8)
     if (msgData[3] !== undefined && msgData[3] !== 0xFF) heartrate.push(msgData[3]);
-    // Field 4 = cadence (uint8)
     if (msgData[4] !== undefined && msgData[4] !== 0xFF) cadence.push(msgData[4]);
-    // Field 6 = speed (uint16, mm/s → km/h)
     if (msgData[6] !== undefined && msgData[6] !== 0xFFFF)
       speed.push(parseFloat((msgData[6] * 0.0036).toFixed(1)));
-    // Field 7 = power (uint16)
     if (msgData[7] !== undefined && msgData[7] !== 0xFFFF) power.push(msgData[7]);
   }
 
   while (pos < endPos && pos < bytes.length - 1) {
     const recordHeader = bytes[pos++];
+    totalRecords++;
 
-    // Bit 7 set = compressed timestamp record
-    // bits 5-4 = local message type (within 0-3), bits 3-0 = time offset
+    if (totalRecords <= 50) {
+      debugHeaders.push({ n: totalRecords, pos: pos-1, h: '0x'+recordHeader.toString(16), type: recordHeader&0x80 ? 'COMP' : (recordHeader&0x40 ? 'DEF' : 'DATA') });
+    }
+
+    // Bit 7 = compressed timestamp record
     if (recordHeader & 0x80) {
       const localMsgType = (recordHeader >> 5) & 0x03;
       const def = localMsgDefs[localMsgType];
       if (!def) continue;
-      // Read all fields just like a normal data record
       const msgData = {};
       for (const field of def.fields) {
         if (pos + field.size > bytes.length) break;
@@ -100,7 +107,8 @@ function parseFIT(bytes) {
         fields.push({ num: bytes[pos++], size: bytes[pos++], type: bytes[pos++] });
       }
       localMsgDefs[localMsgType] = { globalMsgNum, arch, fields };
-      // Developer fields (bit 5 set in header)
+      debugDefs[localMsgType] = { globalMsgNum, numFields, fieldSizes: fields.map(f=>f.size) };
+      // Developer fields
       if (recordHeader & 0x20) {
         if (pos < bytes.length) {
           const numDevFields = bytes[pos++];
@@ -108,7 +116,6 @@ function parseFIT(bytes) {
         }
       }
     } else {
-      // Normal data record
       const def = localMsgDefs[localMsgType];
       if (!def) continue;
       const msgData = {};
@@ -121,10 +128,12 @@ function parseFIT(bytes) {
     }
   }
 
-  return { latlng, altitude, heartrate, cadence, power, speed };
+  return {
+    latlng, altitude, heartrate, cadence, power, speed,
+    _debug: { totalBytes: bytes.length, totalRecords, gpsRecords, latlngFound: latlng.length, defs: debugDefs, firstHeaders: debugHeaders.slice(0,30) }
+  };
 }
 
-// Two's complement: convert unsigned 32-bit to signed
 function toSigned32(n) {
   return n > 0x7FFFFFFF ? n - 0x100000000 : n;
 }
