@@ -1776,7 +1776,7 @@ async function openWahooRide(id) {
     const r = await fetch('/api/wahoo-fit?' + params);
     console.log('[VAMIQ] wahoo-fit response status:', r.status);
     const data = await r.json();
-    console.log('[VAMIQ] wahoo-fit data keys:', Object.keys(data), 'latlng count:', data.latlng?.length);
+    console.log('[VAMIQ] wahoo-fit data keys:', Object.keys(data), 'latlng count:', data.latlng?.length, 'debug:', JSON.stringify(data._debug));
 
     if (data.error) {
       document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">'+data.error+'</div>';
