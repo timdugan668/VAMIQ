@@ -3,5 +3,8 @@
     "api/wahoo-fit.js": {
       "maxDuration": 30
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/invite", "destination": "/invite.html" }
+  ]
 }
