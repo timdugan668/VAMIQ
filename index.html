@@ -1690,6 +1690,44 @@ function updateDashboardFromWahoo(workouts) {
 
   // Summary box
   document.getElementById('d-summary').innerHTML = `<strong>Wahoo synced.</strong> ${date}: ${km}km, ${Math.floor(mins/60)}h${mins%60}min${s.heart_rate_avg?', avg '+Math.round(s.heart_rate_avg)+'bpm':''}${s.power_bike_avg?', avg '+Math.round(s.power_bike_avg)+'W':''}. Keep building toward your goal!`;
+
+  // Goal readiness bars
+  const outdoorRides = rides.filter(r => (r.workout_summary?.distance_accum || 0) > 50000);
+  if (outdoorRides.length && userProfile?.goal_date) {
+    const getD = r => parseFloat(r.workout_summary?.distance_accum || 0);
+    const getE = r => parseFloat(r.workout_summary?.ascent_accum || 0);
+    const getT = r => parseFloat(r.workout_summary?.duration_active_accum || 0);
+
+    const bestDist = Math.max(...outdoorRides.map(getD));
+    const targetDist = userProfile.goal_type === 'century' ? 100000 : 122000;
+    const bestElev = Math.max(...outdoorRides.map(getE));
+    const targetElev = userProfile.goal_type === 'uci_qualifier' ? 1869 : 1200;
+    const bestTime = Math.max(...outdoorRides.map(getT));
+    const targetTime = 270 * 60; // 4h 30min in seconds
+
+    const goalPassed = new Date(userProfile.goal_date) < new Date();
+    let p1, p2, p3, p4;
+
+    if (goalPassed) {
+      p1 = Math.min(Math.round(bestDist/targetDist*100), 99);
+      p2 = Math.min(Math.round(bestElev/targetElev*95), 99);
+      p3 = 99;
+      p4 = 99;
+    } else {
+      p1 = Math.min(Math.round(bestDist/targetDist*100), 95);
+      p2 = Math.min(Math.round(bestElev/targetElev*85), 90);
+      p3 = Math.min(Math.round(bestTime/targetTime*90), 90);
+      const targetFTP = userProfile?.goal_type === 'uci_qualifier' ? 250 : 220;
+      const currentFTP = userProfile?.ftp || ftp || 200;
+      const ftpPct = Math.min(Math.round(currentFTP / targetFTP * 100), 95);
+      p4 = Math.min(Math.round((p1+p2+p3+ftpPct)/4*0.85), 95);
+    }
+
+    [['p1',p1],['p2',p2],['p3',p3],['p4',p4]].forEach(([id,val]) => {
+      document.getElementById(id).style.width = val+'%';
+      document.getElementById(id+'-pct').textContent = val+'%';
+    });
+  }
 }
 
 async function openWahooRide(id) {
