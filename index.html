@@ -2814,7 +2814,8 @@ function askCoachAboutRide() {
   // If Wahoo ride, use the pre-built context directly
   if (!currentRideData && window.CURRENT_RIDE_CONTEXT) {
     closeModal();
-    show('coach', document.querySelector('.nav-tab[onclick*="coach"]'));
+    const coachTab = Array.from(document.querySelectorAll('.nav-tab')).find(b => b.textContent.trim().toLowerCase().includes('coach'));
+    show('coach', coachTab);
     const msg = 'Can you analyse this ride for me and give me some coaching feedback?\n\n' + window.CURRENT_RIDE_CONTEXT;
     document.getElementById('cinput').value = msg;
     send();
@@ -2978,7 +2979,7 @@ function decodePolyline(encoded) {
 }
 
 function closeModal(e) {
-  if (e.target === document.getElementById('ride-modal')) {
+  if (!e || e.target === document.getElementById('ride-modal')) {
     document.getElementById('ride-modal').style.display = 'none';
     if (leafletMap) { leafletMap.remove(); leafletMap = null; }
   }
