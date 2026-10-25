@@ -2801,8 +2801,8 @@ function askCoachAboutRide() {
     closeModal();
     show('coach', document.querySelector('.nav-tab[onclick*="coach"]'));
     const msg = 'Can you analyse this ride for me and give me some coaching feedback?\n\n' + window.CURRENT_RIDE_CONTEXT;
-    document.getElementById('chat-input').value = msg;
-    sendMsg();
+    document.getElementById('cinput').value = msg;
+    send();
     return;
   }
 
