@@ -1535,6 +1535,37 @@ function show(id, btn) {
 }
 
 // ── STRAVA ──
+// Save refreshed Wahoo tokens to Supabase and update in-memory profile
+async function saveWahooTokens(newAccessToken, newRefreshToken) {
+  if (!currentUser || !newAccessToken) return;
+  userProfile.wahoo_access_token = newAccessToken;
+  if (newRefreshToken) userProfile.wahoo_refresh_token = newRefreshToken;
+  console.log('[VAMIQ] Saving refreshed Wahoo tokens to Supabase');
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const authToken = session?.access_token;
+    await fetch(
+      'https://cjonjfzpqtjpvrabjkla.supabase.co/rest/v1/profiles?id=eq.' + currentUser.id,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': 'Bearer ' + (authToken || SUPABASE_KEY),
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({
+          wahoo_access_token: newAccessToken,
+          wahoo_refresh_token: newRefreshToken || userProfile.wahoo_refresh_token,
+          updated_at: new Date().toISOString()
+        })
+      }
+    );
+  } catch(e) {
+    console.warn('[VAMIQ] Could not save refreshed tokens:', e.message);
+  }
+}
+
 async function syncWahoo() {
   if (!userProfile?.wahoo_access_token) return;
   const btn = document.getElementById('sync-btn');
@@ -1548,8 +1579,19 @@ async function syncWahoo() {
     const r = await fetch('/api/wahoo?' + params);
     const data = await r.json();
 
+    // If the server refreshed the token, save new tokens immediately
+    if (data.new_access_token) {
+      console.log('[VAMIQ] Token was refreshed automatically — saving new tokens');
+      await saveWahooTokens(data.new_access_token, data.new_refresh_token);
+    }
+
     if (data.errors || data.error) {
-      showSyncError('Wahoo error: ' + (data.error_description || data.error || JSON.stringify(data.errors)));
+      // token_expired means refresh failed — user must reconnect
+      if (data.error === 'token_expired' || data.error === 'refresh_failed') {
+        showSyncError('Wahoo session expired. Please reconnect Wahoo in the Profile tab.');
+      } else {
+        showSyncError('Wahoo error: ' + (data.error_description || data.error || JSON.stringify(data.errors)));
+      }
       btn.textContent = '↻ Sync'; btn.disabled = false;
       return;
     }
@@ -1794,6 +1836,11 @@ async function openWahooRide(id) {
       const detailRes = await fetch('/api/wahoo?' + detailParams);
       const detail = await detailRes.json();
       console.log('[VAMIQ] workout detail:', JSON.stringify(detail).substring(0, 500));
+      // Save refreshed tokens if the detail fetch triggered a token refresh
+      if (detail.new_access_token) {
+        console.log('[VAMIQ] Token refreshed during ride detail fetch — saving');
+        await saveWahooTokens(detail.new_access_token, detail.new_refresh_token);
+      }
       fitUrl = detail.file?.url;
       console.log('[VAMIQ] fitUrl from detail:', fitUrl);
     } catch(e) { console.error('[VAMIQ] detail fetch error:', e); }
