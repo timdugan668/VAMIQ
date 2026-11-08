@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   });
 
   let currentToken = access_token;
-  let newTokens = null; // populated if a refresh happens
+  let newTokens = null;
 
   async function fetchWithRefresh(url) {
     let r = await fetch(url, { headers: makeHeaders(currentToken) });
@@ -36,28 +36,29 @@ export default async function handler(req, res) {
           };
           r = await fetch(url, { headers: makeHeaders(currentToken) });
         }
-      } catch(e) {
-        // Refresh failed — fall through, original 401 response returned
-      }
+      } catch(e) {}
     }
     return r;
   }
 
-  // Single workout detail
   if (mode === 'workout' && workout_id) {
     const r = await fetchWithRefresh(`https://api.wahooligan.com/v1/workouts/${workout_id}`);
     const data = await r.json();
     return res.status(r.ok ? 200 : r.status).json({ ...data, ...newTokens });
   }
 
-  // Power zones
   if (mode === 'power_zones') {
     const r = await fetchWithRefresh('https://api.wahooligan.com/v1/power_zones');
     const data = await r.json();
     return res.status(r.ok ? 200 : r.status).json({ ...data, ...newTokens });
   }
 
-  // Default: list workouts
+  if (mode === 'user') {
+    const r = await fetchWithRefresh('https://api.wahooligan.com/v1/user');
+    const data = await r.json();
+    return res.status(r.ok ? 200 : r.status).json({ ...data, ...newTokens });
+  }
+
   try {
     const r = await fetchWithRefresh(
       'https://api.wahooligan.com/v1/workouts?page=1&per_page=60&order=desc'
