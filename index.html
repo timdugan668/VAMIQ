@@ -1401,19 +1401,41 @@ function updateZones() {
   const weight = userProfile?.weight || 80;
   if (!ftp) return;
 
-  // Estimate max HR from FTP (calibrated: FTP = maxHR * 1.22)
-  // Also use max HR from Strava data if available
+  // Use real Wahoo max HR if available, otherwise estimate from FTP
+  const wahooMaxHR = userProfile?.wahoo_max_hr || 0;
   const stravaMaxHR = parseInt(document.getElementById('d-ftp-sub')?.textContent?.match(/max HR (\d+)/)?.[1]) || 0;
-  const estMaxHR = stravaMaxHR || Math.round(ftp / 1.22);
+  const estMaxHR = wahooMaxHR || stravaMaxHR || Math.round(ftp / 1.22);
+  const maxHRSource = wahooMaxHR ? 'from Wahoo profile' : (stravaMaxHR ? 'from Strava data' : 'estimated from FTP');
 
-  const powerZones = [
-    { id: 'z1', pLo: 0,              pHi: Math.round(ftp * 0.55) },
-    { id: 'z2', pLo: Math.round(ftp * 0.56), pHi: Math.round(ftp * 0.75) },
-    { id: 'z3', pLo: Math.round(ftp * 0.76), pHi: Math.round(ftp * 0.90) },
-    { id: 'z4', pLo: Math.round(ftp * 0.91), pHi: Math.round(ftp * 1.05) },
-    { id: 'z5', pLo: Math.round(ftp * 1.06), pHi: Math.round(ftp * 1.20) },
-    { id: 'z6', pLo: Math.round(ftp * 1.21), pHi: null },
-  ];
+  // Use real Wahoo power zones if available, otherwise derive from FTP
+  const wahooZones = userProfile?.wahoo_power_zones;
+  let parsedWahooZones = null;
+  if (wahooZones) {
+    try {
+      parsedWahooZones = typeof wahooZones === 'string' ? JSON.parse(wahooZones) : wahooZones;
+    } catch(e) {}
+  }
+
+  let powerZones;
+  if (parsedWahooZones && parsedWahooZones.length >= 5) {
+    // Map Wahoo zone structure to our display format
+    powerZones = parsedWahooZones.map((z, i) => ({
+      id: 'z' + (i + 1),
+      pLo: z.min_power || z.minimum || 0,
+      pHi: z.max_power || z.maximum || null
+    }));
+    // Ensure z6 exists
+    if (powerZones.length === 6 && powerZones[5].pHi) powerZones[5].pHi = null;
+  } else {
+    powerZones = [
+      { id: 'z1', pLo: 0,              pHi: Math.round(ftp * 0.55) },
+      { id: 'z2', pLo: Math.round(ftp * 0.56), pHi: Math.round(ftp * 0.75) },
+      { id: 'z3', pLo: Math.round(ftp * 0.76), pHi: Math.round(ftp * 0.90) },
+      { id: 'z4', pLo: Math.round(ftp * 0.91), pHi: Math.round(ftp * 1.05) },
+      { id: 'z5', pLo: Math.round(ftp * 1.06), pHi: Math.round(ftp * 1.20) },
+      { id: 'z6', pLo: Math.round(ftp * 1.21), pHi: null },
+    ];
+  }
 
   const hrZones = [
     { id: 'z1', hLo: 0,                          hHi: Math.round(estMaxHR * 0.60) },
@@ -1434,10 +1456,16 @@ function updateZones() {
     if (el) el.textContent = z.hHi ? z.hLo + '–' + z.hHi + ' bpm' : '>' + z.hLo + ' bpm';
   });
 
+  const powerZoneSource = parsedWahooZones ? 'from Wahoo profile' : 'estimated from FTP';
   document.getElementById('zones-note').innerHTML =
-    '<strong>Based on FTP ' + ftp + 'W (' + (ftp/weight).toFixed(2) + ' W/kg at ' + weight + 'kg)</strong> · ' +
-    'Est. max HR ' + estMaxHR + ' bpm. ' +
-    'Update your FTP in Profile after a 20-min test effort for more accurate zones.';
+    '<strong>FTP ' + ftp + 'W (' + (ftp/weight).toFixed(2) + ' W/kg at ' + weight + 'kg)</strong>' +
+    ' · Max HR ' + estMaxHR + ' bpm (' + maxHRSource + ')' +
+    ' · Power zones ' + powerZoneSource + '.';
+
+  // Store computed zones on userProfile for use in system prompt
+  userProfile._computedHRZones = hrZones;
+  userProfile._computedPowerZones = powerZones;
+  userProfile._estMaxHR = estMaxHR;
 }
 
 function updateCoachWelcome() {
@@ -1658,6 +1686,11 @@ async function syncWahoo() {
       btn.textContent = '✓ Synced';
       hideSyncError();
       setTimeout(() => { btn.textContent = '↻ Sync'; btn.disabled = false; }, 3000);
+      // Fetch zones once per session (skip if already loaded)
+      if (!userProfile.wahoo_max_hr && !window._wahooZonesFetched) {
+        window._wahooZonesFetched = true;
+        fetchWahooZones();
+      }
     } else {
       btn.textContent = '↻ Sync'; btn.disabled = false;
       showSyncError('No Wahoo workouts found. Make sure you have rides in the Wahoo app.');
@@ -1665,6 +1698,88 @@ async function syncWahoo() {
   } catch(e) {
     btn.textContent = '↻ Sync'; btn.disabled = false;
     showSyncError('Connection error: ' + e.message);
+  }
+}
+
+// Fetch real power zones + max HR from Wahoo and save to profile
+async function fetchWahooZones() {
+  if (!userProfile?.wahoo_access_token) return;
+  try {
+    // Fetch power zones
+    const pParams = new URLSearchParams({
+      access_token: userProfile.wahoo_access_token,
+      refresh_token: userProfile.wahoo_refresh_token || '',
+      mode: 'power_zones'
+    });
+    const pRes = await fetch('/api/wahoo?' + pParams);
+    const pData = await pRes.json();
+    console.log('[VAMIQ] Wahoo power zones:', JSON.stringify(pData).substring(0, 300));
+    if (pData.new_access_token) await saveWahooTokens(pData.new_access_token, pData.new_refresh_token);
+
+    // Fetch user profile for max HR
+    const uParams = new URLSearchParams({
+      access_token: userProfile.wahoo_access_token,
+      refresh_token: userProfile.wahoo_refresh_token || '',
+      mode: 'user'
+    });
+    const uRes = await fetch('/api/wahoo?' + uParams);
+    const uData = await uRes.json();
+    console.log('[VAMIQ] Wahoo user profile:', JSON.stringify(uData).substring(0, 300));
+    if (uData.new_access_token) await saveWahooTokens(uData.new_access_token, uData.new_refresh_token);
+
+    // Extract and store what we need
+    const updates = {};
+
+    // Max HR from user profile
+    const wahooMaxHR = uData.max_heart_rate || uData.heart_rate_maximum || null;
+    if (wahooMaxHR) {
+      userProfile.wahoo_max_hr = wahooMaxHR;
+      updates.wahoo_max_hr = wahooMaxHR;
+      console.log('[VAMIQ] Wahoo max HR:', wahooMaxHR);
+    }
+
+    // FTP from user profile (if Wahoo has it)
+    if (uData.ftp && !userProfile.ftp) {
+      userProfile.ftp = uData.ftp;
+      updates.ftp = uData.ftp;
+    }
+
+    // Power zones — store as array of {min, max} watt boundaries
+    const rawZones = pData.power_zones || pData.zones || pData;
+    if (Array.isArray(rawZones) && rawZones.length > 0) {
+      userProfile.wahoo_power_zones = rawZones;
+      updates.wahoo_power_zones = JSON.stringify(rawZones);
+      console.log('[VAMIQ] Wahoo power zones stored:', rawZones.length, 'zones');
+    }
+
+    // Persist to Supabase if we got anything useful
+    if (Object.keys(updates).length > 0 && currentUser) {
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        await fetch(
+          'https://cjonjfzpqtjpvrabjkla.supabase.co/rest/v1/profiles?id=eq.' + currentUser.id,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_KEY,
+              'Authorization': 'Bearer ' + ((session?.access_token) || SUPABASE_KEY),
+              'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify({ ...updates, updated_at: new Date().toISOString() })
+          }
+        );
+        console.log('[VAMIQ] Saved Wahoo zones to Supabase:', Object.keys(updates));
+      } catch(e) {
+        console.warn('[VAMIQ] Could not save zones to Supabase:', e.message);
+      }
+    }
+
+    // Re-render zones tab with real data
+    updateZones();
+
+  } catch(e) {
+    console.warn('[VAMIQ] fetchWahooZones error:', e.message);
   }
 }
 
@@ -1939,12 +2054,80 @@ async function openWahooRide(id) {
       return;
     }
 
-    // Update coach context and modal Max HR tile from FIT file (Wahoo doesn't put max HR in workout_summary)
-    if (data.heartrate?.length > 0) {
-      const fitMaxHR = Math.max(...data.heartrate);
-      window.CURRENT_RIDE_CONTEXT = 'Wahoo ride: '+ride.name+', '+date+', Duration: '+duration+(isIndoor?', Indoor trainer':', Distance: '+km+'km, Elevation: '+elev+'m')+', Avg HR: '+hr+' bpm, Max HR: '+fitMaxHR+' bpm, Cadence: '+cad+' rpm, Calories: '+cal+' kcal'+(power?', Avg power: '+power+'W':'');
-      console.log('[VAMIQ] Updated coach context with FIT max HR:', fitMaxHR);
-      // Update the Max HR tile in the modal (was showing — before FIT loaded)
+    // Build rich coach context from FIT streams (HR, power, cadence zone breakdowns)
+    const fitMaxHR = data.heartrate?.length > 0 ? Math.max(...data.heartrate) : 0;
+    const maxHR = userProfile?._estMaxHR || (userProfile?.ftp ? Math.round(userProfile.ftp / 1.22) : 175);
+    const hz = userProfile?._computedHRZones || [
+      { hHi: Math.round(maxHR*0.60) }, { hLo: Math.round(maxHR*0.61), hHi: Math.round(maxHR*0.72) },
+      { hLo: Math.round(maxHR*0.73), hHi: Math.round(maxHR*0.83) }, { hLo: Math.round(maxHR*0.84), hHi: Math.round(maxHR*0.94) },
+      { hLo: Math.round(maxHR*0.95), hHi: maxHR }, { hLo: maxHR, hHi: null }
+    ];
+    const pz = userProfile?._computedPowerZones;
+
+    // HR zone time breakdown
+    let hrZoneText = '';
+    if (data.heartrate?.length > 10) {
+      const zNames = ['Z1 Recovery','Z2 Endurance','Z3 Tempo','Z4 Threshold','Z5 VO2max','Z6 Anaerobic'];
+      const counts = [0,0,0,0,0,0];
+      data.heartrate.forEach(h => {
+        if (h <= hz[0].hHi) counts[0]++;
+        else if (h <= hz[1].hHi) counts[1]++;
+        else if (h <= hz[2].hHi) counts[2]++;
+        else if (h <= hz[3].hHi) counts[3]++;
+        else if (h <= hz[4].hHi) counts[4]++;
+        else counts[5]++;
+      });
+      const total = data.heartrate.length;
+      hrZoneText = '\nHR zone breakdown: ' + zNames.map((n,i) => n+': '+Math.round(counts[i]/total*100)+'%').filter((_,i)=>counts[i]>0).join(', ');
+    }
+
+    // Power zone time breakdown
+    let powerZoneText = '';
+    if (data.power?.length > 10 && pz) {
+      const zNames = ['Z1','Z2','Z3','Z4','Z5','Z6'];
+      const counts = new Array(pz.length).fill(0);
+      const moving = data.power.filter(w => w > 0);
+      moving.forEach(w => {
+        for (let i = 0; i < pz.length; i++) {
+          if (!pz[i].pHi || w <= pz[i].pHi) { counts[i]++; break; }
+        }
+      });
+      const total = moving.length || 1;
+      const avgPwr = Math.round(moving.reduce((a,b)=>a+b,0)/total);
+      const maxPwr = Math.max(...data.power);
+      // Normalised power (NP)
+      const np = Math.round(Math.sqrt(Math.sqrt(moving.reduce((s,w)=>s+Math.pow(w,4),0)/total)));
+      const ftpVal = userProfile?.ftp || 0;
+      const if_ = ftpVal ? (np/ftpVal).toFixed(2) : null;
+      powerZoneText = '\nPower: avg ' + avgPwr + 'W, max ' + maxPwr + 'W, NP ' + np + 'W' + (if_?', IF '+if_:'');
+      powerZoneText += '\nPower zone breakdown: ' + zNames.map((n,i) => n+': '+Math.round(counts[i]/total*100)+'%').filter((_,i)=>counts[i]>0).join(', ');
+    }
+
+    // Cadence distribution
+    let cadenceText = '';
+    if (data.cadence?.length > 10) {
+      const moving = data.cadence.filter(c => c > 0);
+      const avgCad = Math.round(moving.reduce((a,b)=>a+b,0)/moving.length);
+      const sub80 = moving.filter(c=>c<80).length;
+      const above90 = moving.filter(c=>c>=90).length;
+      cadenceText = '\nCadence: avg ' + avgCad + ' rpm';
+      if (moving.length > 0) cadenceText += ', <80rpm: '+Math.round(sub80/moving.length*100)+'%, ≥90rpm: '+Math.round(above90/moving.length*100)+'%';
+    }
+
+    // Build full coach context
+    window.CURRENT_RIDE_CONTEXT = `DETAILED RIDE ANALYSIS REQUEST:
+Ride: ${ride.name} on ${date}
+${isIndoor ? 'Indoor trainer session' : 'Distance: '+km+' km, Elevation: '+elev+'m'}
+Duration: ${duration}
+Avg HR: ${hr} bpm${fitMaxHR?', Max HR: '+fitMaxHR+' bpm':''}
+${cad ? 'Avg cadence: '+cad+' rpm' : ''}${power ? '\nAvg power: '+power+'W' : ''}
+Calories: ${cal} kcal
+${hrZoneText}${powerZoneText}${cadenceText}`;
+
+    console.log('[VAMIQ] Rich coach context built, fitMaxHR:', fitMaxHR);
+
+    // Update the Max HR tile in the modal
+    if (fitMaxHR) {
       const maxHRTiles = document.querySelectorAll('#modal-stats .modal-stat');
       maxHRTiles.forEach(tile => {
         if (tile.querySelector('.lbl')?.textContent === 'Max HR') {
@@ -1969,26 +2152,22 @@ async function openWahooRide(id) {
       drawElevation(data.altitude);
     }
 
-    // HR zones
+    // HR zones bar (uses real Wahoo max HR if available)
     if (data.heartrate?.length > 5) {
       const hrData = data.heartrate;
-      const maxHRest = Math.round(ftp * 1.22);
-      const zones = [
-        { name:'Z1', color:'#4CAF7D', max: maxHRest*0.60 },
-        { name:'Z2', color:'#2D9B6A', max: maxHRest*0.72 },
-        { name:'Z3', color:'#E8C30A', max: maxHRest*0.83 },
-        { name:'Z4', color:'#E8A20A', max: maxHRest*0.95 },
-        { name:'Z5+', color:'#E84040', max: 999 }
-      ];
+      const realMaxHR = userProfile?._estMaxHR || Math.round(ftp * 1.22);
+      const zoneColors = ['#4CAF7D','#2D9B6A','#E8C30A','#E8A20A','#E84040'];
+      const zoneNames = ['Z1','Z2','Z3','Z4','Z5+'];
+      const zoneBounds = [realMaxHR*0.60, realMaxHR*0.72, realMaxHR*0.83, realMaxHR*0.95, 999];
       const counts = [0,0,0,0,0];
-      hrData.forEach(h => { for(let i=0;i<zones.length;i++){if(h<=zones[i].max){counts[i]++;break;}} });
+      hrData.forEach(h => { for(let i=0;i<zoneBounds.length;i++){if(h<=zoneBounds[i]){counts[i]++;break;}} });
       const total = hrData.length || 1;
       document.getElementById('hr-section').style.display = 'block';
-      document.getElementById('hr-zones-bar').innerHTML = zones.map((z,i) =>
-        '<div style="flex:'+counts[i]+';background:'+z.color+';min-width:'+(counts[i]>0?'2px':'0')+'"></div>'
+      document.getElementById('hr-zones-bar').innerHTML = zoneColors.map((c,i) =>
+        '<div style="flex:'+counts[i]+';background:'+c+';min-width:'+(counts[i]>0?'2px':'0')+'"></div>'
       ).join('');
-      document.getElementById('hr-zones-legend').innerHTML = zones.map((z,i) =>
-        '<span style="color:'+z.color+'">'+z.name+': '+Math.round(counts[i]/total*100)+'%</span>'
+      document.getElementById('hr-zones-legend').innerHTML = zoneNames.map((n,i) =>
+        '<span style="color:'+zoneColors[i]+'">'+n+': '+Math.round(counts[i]/total*100)+'%</span>'
       ).join(' · ');
     }
 
@@ -2190,6 +2369,28 @@ function buildSystemPrompt() {
 
   const rideContext = window.CURRENT_RIDE_CONTEXT ? ("\n\n" + window.CURRENT_RIDE_CONTEXT) : "";
 
+  // Training zones for system prompt
+  const maxHR = p._estMaxHR || Math.round((p.ftp||200) / 1.22);
+  const hz = p._computedHRZones;
+  const pz = p._computedPowerZones;
+  const zonesText = (hz && pz) ? `
+
+ATHLETE TRAINING ZONES (use these for all coaching — do not estimate):
+HR zones (max HR ${maxHR} bpm):
+  Z1 Recovery: <${hz[0].hHi} bpm
+  Z2 Endurance: ${hz[1].hLo}–${hz[1].hHi} bpm
+  Z3 Tempo: ${hz[2].hLo}–${hz[2].hHi} bpm
+  Z4 Threshold: ${hz[3].hLo}–${hz[3].hHi} bpm
+  Z5 VO2max: ${hz[4].hLo}–${hz[4].hHi} bpm
+  Z6 Anaerobic: >${hz[5].hLo} bpm
+Power zones (FTP ${p.ftp||'unknown'}W):
+  Z1 Recovery: <${pz[0].pHi}W
+  Z2 Endurance: ${pz[1].pLo}–${pz[1].pHi}W
+  Z3 Tempo: ${pz[2].pLo}–${pz[2].pHi}W
+  Z4 Threshold: ${pz[3].pLo}–${pz[3].pHi}W
+  Z5 VO2max: ${pz[4].pLo}–${pz[4].pHi}W
+  Z6 Anaerobic+: >${pz[5].pLo}W` : '';
+
   return `You are VAMIQ, the built-in AI cycling coach inside the VAMIQ app. You ARE the VAMIQ coaching system — there is no separate VAMIQ team or support team. You and VAMIQ are the same thing.
 
 CALENDAR UPDATES: You CAN update the athlete's training calendar. When the athlete asks to change their schedule, you MUST end your response with this exact line on its own (no markdown around it):
@@ -2248,7 +2449,7 @@ VAMIQ_EVENTS_UPDATE:[{"name":"Event Name","date":"YYYY-MM-DD","taper":true}]
 
 ALWAYS output VAMIQ_PLAN_UPDATE when changing schedule.
 ALWAYS output VAMIQ_EVENTS_UPDATE when athlete mentions target events or races.
-These two lines go at the very end, after all other text, nothing after them.` + rideContext;
+These two lines go at the very end, after all other text, nothing after them.` + zonesText + rideContext;
 }
 
 async function send() {
