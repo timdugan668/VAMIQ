@@ -666,6 +666,9 @@ select:focus { border-color:var(--orange); }
         <textarea class="cinput" id="cinput" placeholder="Ask your coach anything..." rows="1"></textarea>
         <button class="sbtn" id="sbtn" onclick="send()">Send</button>
       </div>
+      <div style="text-align:right;margin-top:4px;padding-right:2px">
+        <button onclick="if(confirm('Clear chat history?')){clearChatHistory()}" style="background:none;border:none;color:var(--mist);font-size:11px;cursor:pointer;padding:2px 0">Clear history</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1141,8 +1144,58 @@ async function initApp() {
   if (userProfile?.name) {
     document.getElementById('app-sub').textContent = 'Welcome back, ' + userProfile.name;
   }
+  // Load persisted chat history for this user
+  loadChatHistory();
   // Clear any stale Strava errors
   hideSyncError();
+}
+
+function chatStorageKey() {
+  return currentUser ? 'vamiq_chat_' + currentUser.id : null;
+}
+
+function loadChatHistory() {
+  const key = chatStorageKey();
+  if (!key) return;
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        chatHistory = parsed;
+        // Replay messages into the chat UI
+        const feed = document.getElementById('chat-msgs');
+        if (feed) {
+          // Clear default welcome message, then replay history
+          feed.innerHTML = '';
+          chatHistory.forEach(m => addMsg(m.role === 'user' ? 'user' : 'coach', m.content));
+        }
+        console.log('[VAMIQ] Loaded', chatHistory.length, 'chat messages from storage');
+      }
+    }
+  } catch(e) {
+    console.warn('[VAMIQ] Could not load chat history:', e.message);
+  }
+}
+
+function saveChatHistory() {
+  const key = chatStorageKey();
+  if (!key) return;
+  try {
+    // Keep last 40 messages in storage (20 pairs)
+    const toSave = chatHistory.slice(-40);
+    localStorage.setItem(key, JSON.stringify(toSave));
+  } catch(e) {
+    console.warn('[VAMIQ] Could not save chat history:', e.message);
+  }
+}
+
+function clearChatHistory() {
+  const key = chatStorageKey();
+  if (key) { try { localStorage.removeItem(key); } catch(e) {} }
+  chatHistory = [];
+  const feed = document.getElementById('chat-msgs');
+  if (feed) feed.innerHTML = '';
 }
 
 function updateCountdowns() {
@@ -1661,15 +1714,31 @@ function buildWahooCoachData(rides) {
 
   const rideList = recent.map(r => {
     const s = r.workout_summary || {};
-    const date = r.created_at ? new Date(r.created_at).toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'short'}) : '?';
-    const km = s.distance_accum ? (s.distance_accum/1000).toFixed(1) : '?';
+    // Use starts (actual ride date) over created_at (upload date)
+    const dateStr = r.starts || r.created_at;
+    const date = dateStr ? new Date(dateStr).toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short', year:'numeric'}) : '?';
+    const km = s.distance_accum ? (s.distance_accum/1000).toFixed(1) : null;
     const mins = s.duration_active_accum ? Math.round(s.duration_active_accum/60) : 0;
     const elev = s.ascent_accum ? Math.round(s.ascent_accum) : 0;
     const hr = s.heart_rate_avg ? Math.round(s.heart_rate_avg) : 0;
     const power = s.power_bike_avg ? Math.round(s.power_bike_avg) : 0;
-    const cad = s.cadence_avg ? Math.round(s.cadence_avg) : 0;
-    return `${date}: ${km}km, ${elev}m elev, ${Math.floor(mins/60)}h${mins%60}m${hr?', avg '+hr+'bpm':''}${power?', avg '+power+'W':''}${cad?', cadence '+cad+'rpm':''}`;
+    const isIndoor = r.workout_type_id === 12;
+    const type = isIndoor ? 'Indoor' : 'Outdoor';
+    const distStr = km ? km+'km' : (isIndoor ? 'Indoor' : '?km');
+    return `${date} [${type}]: ${distStr}${elev?' '+elev+'m elev':''}, ${Math.floor(mins/60)}h${mins%60}m${hr?', avg '+hr+'bpm':''}${power?', avg '+power+'W':''}`;
   }).join('\n');
+
+  // Goal readiness scores from dashboard bars
+  const p1El = document.getElementById('p1-pct');
+  const p2El = document.getElementById('p2-pct');
+  const p3El = document.getElementById('p3-pct');
+  const p4El = document.getElementById('p4-pct');
+  const readiness = (p1El && p1El.textContent !== '—') ? `
+GOAL READINESS (live):
+- Aerobic base: ${p1El.textContent}
+- Climbing capacity: ${p2El?.textContent || '—'}
+- Endurance: ${p3El?.textContent || '—'}
+- Race pace readiness: ${p4El?.textContent || '—'}` : '';
 
   return `
 
@@ -1677,6 +1746,7 @@ LAST 4 WEEKS WAHOO WORKOUTS:
 Total distance: ${(totalDist/1000).toFixed(0)} km
 Avg weekly hours: ${avgWeeklyHours}h
 Sessions: ${recent.length}
+${readiness}
 
 RECENT RIDES (newest first):
 ${rideList}`;
@@ -2236,6 +2306,7 @@ async function send() {
     }
 
     chatHistory.push({ role:'assistant', content:fullReply });
+    saveChatHistory(); // persist after each exchange
     window.CURRENT_RIDE_CONTEXT = null; // clear after successful send
 
     // Process VAMIQ_PLAN_UPDATE after streaming completes
