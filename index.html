@@ -1020,8 +1020,9 @@ async function initApp() {
     document.getElementById('d-ftp').textContent = '~' + userProfile.ftp + ' W';
     document.getElementById('d-ftp-sub').textContent = 'From your profile';
     document.getElementById('d-wkg').textContent = (userProfile.ftp / weight).toFixed(2);
-    updateZones();
   }
+  // Always compute zones on load (uses wahoo_max_hr/wahoo_power_zones from profile if present)
+  updateZones();
   // Update target card from profile
   updateTargetCard(userProfile);
 
@@ -1399,12 +1400,12 @@ function updateWeeklyPlan() {
 function updateZones() {
   const ftp = userProfile?.ftp || 0;
   const weight = userProfile?.weight || 80;
-  if (!ftp) return;
+  // Don't bail — even without FTP we can compute HR zones from wahoo_max_hr
 
   // Use real Wahoo max HR if available, otherwise estimate from FTP
   const wahooMaxHR = userProfile?.wahoo_max_hr || 0;
   const stravaMaxHR = parseInt(document.getElementById('d-ftp-sub')?.textContent?.match(/max HR (\d+)/)?.[1]) || 0;
-  const estMaxHR = wahooMaxHR || stravaMaxHR || Math.round(ftp / 1.22);
+  const estMaxHR = wahooMaxHR || stravaMaxHR || (ftp ? Math.round(ftp / 1.22) : 175);
   const maxHRSource = wahooMaxHR ? 'from Wahoo profile' : (stravaMaxHR ? 'from Strava data' : 'estimated from FTP');
 
   // Use real Wahoo power zones if available, otherwise derive from FTP
@@ -2373,23 +2374,26 @@ function buildSystemPrompt() {
   const maxHR = p._estMaxHR || Math.round((p.ftp||200) / 1.22);
   const hz = p._computedHRZones;
   const pz = p._computedPowerZones;
-  const zonesText = (hz && pz) ? `
-
-ATHLETE TRAINING ZONES (use these for all coaching — do not estimate):
+  let zonesText = '';
+  if (hz) {
+    zonesText += `\n\nATHLETE TRAINING ZONES (use these for all coaching — do not estimate):
 HR zones (max HR ${maxHR} bpm):
   Z1 Recovery: <${hz[0].hHi} bpm
   Z2 Endurance: ${hz[1].hLo}–${hz[1].hHi} bpm
   Z3 Tempo: ${hz[2].hLo}–${hz[2].hHi} bpm
   Z4 Threshold: ${hz[3].hLo}–${hz[3].hHi} bpm
   Z5 VO2max: ${hz[4].hLo}–${hz[4].hHi} bpm
-  Z6 Anaerobic: >${hz[5].hLo} bpm
-Power zones (FTP ${p.ftp||'unknown'}W):
+  Z6 Anaerobic: >${hz[5].hLo} bpm`;
+  }
+  if (pz) {
+    zonesText += `\nPower zones (FTP ${p.ftp||'unknown'}W):
   Z1 Recovery: <${pz[0].pHi}W
   Z2 Endurance: ${pz[1].pLo}–${pz[1].pHi}W
   Z3 Tempo: ${pz[2].pLo}–${pz[2].pHi}W
   Z4 Threshold: ${pz[3].pLo}–${pz[3].pHi}W
   Z5 VO2max: ${pz[4].pLo}–${pz[4].pHi}W
-  Z6 Anaerobic+: >${pz[5].pLo}W` : '';
+  Z6 Anaerobic+: >${pz[5].pLo}W`;
+  }
 
   return `You are VAMIQ, the built-in AI cycling coach inside the VAMIQ app. You ARE the VAMIQ coaching system — there is no separate VAMIQ team or support team. You and VAMIQ are the same thing.
 
@@ -2417,7 +2421,7 @@ GOAL SUMMARY:
 - Current training phase: ${p.goal_date ? getPhase(new Date()) : 'unknown'}
 - Weeks to event: ${p.goal_date ? Math.ceil((new Date(p.goal_date)-new Date())/(7*86400000)) : 'unknown'}
 
-ATHLETE'S WEEKLY SCHEDULE (timezone: \${userTimezone}):
+ATHLETE'S WEEKLY SCHEDULE (timezone: ${userTimezone}):
 - Monday: Rest
 - Tuesday: Z2 endurance (rollers/indoors)
 - Wednesday: Threshold intervals (rollers/indoors)
@@ -2425,7 +2429,7 @@ ATHLETE'S WEEKLY SCHEDULE (timezone: \${userTimezone}):
 - Friday: Social/group ride outdoors
 - Saturday: Fatigue climbing or intervals outdoors
 - Sunday: Long ride outdoors (the key weekly session)
-Note: All ride dates are in the athlete's local time (\${userTimezone}). Do not adjust.
+Note: All ride dates are in the athlete's local time (${userTimezone}). Do not adjust.
 
 WEEK-BY-WEEK ADAPTATION:
 - 8+ weeks out: Base phase — long Z2, 3x12min threshold, fatigue climbing 3x8min
@@ -2434,7 +2438,7 @@ WEEK-BY-WEEK ADAPTATION:
 - Race week: Taper — 45min easy rides, short race-pace reminders, rest and prepare
 You MUST prescribe sessions appropriate to the current phase. Never give base-phase sessions when athlete is 2 weeks from their event.
 
-TIMEZONE NOTE: Athlete timezone is \${userTimezone} (UTC offset \${userUTCOffset}). Strava activity dates provided use start_date_local which is already in the athlete's local time. Do NOT adjust dates — treat all dates and days as-is in the athlete's local time.
+TIMEZONE NOTE: Athlete timezone is ${userTimezone} (UTC offset ${userUTCOffset}). Strava activity dates provided use start_date_local which is already in the athlete's local time. Do NOT adjust dates — treat all dates and days as-is in the athlete's local time.
 
 IMPORTANT: Tailor ALL coaching advice to the athlete's goal. Be specific, practical and encouraging. Australian casual tone. Concise but actionable.
 
