@@ -1477,7 +1477,8 @@ function updateCoachWelcome() {
   const goal = userProfile.goal_event || (userProfile.goal_type === 'uci_qualifier' ? 'UCI Gran Fondo qualifier' : 'your cycling goal');
   const days = userProfile.goal_date ? Math.ceil((new Date(userProfile.goal_date) - new Date()) / 86400000) : null;
   const daysText = days && days > 0 ? ` You have ${days} days to prepare.` : '';
-  document.getElementById('coach-welcome').textContent = `G'day ${name}! I'm your VAMIQ coach. I'm here to help you reach ${goal}.${daysText} What do you want to work on today?`;
+  const el = document.getElementById('coach-welcome');
+  if (el) el.textContent = `G'day ${name}! I'm your VAMIQ coach. I'm here to help you reach ${goal}.${daysText} What do you want to work on today?`;
 }
 
 function editGoal() { showScreen('onboarding'); nextStep(2); }
