@@ -576,7 +576,10 @@ select:focus { border-color:var(--orange); }
       <div class="field"><label>Age</label><input type="number" id="p-age" min="18" max="80" /></div>
       <div class="field"><label>Weight (kg)</label><input type="number" id="p-weight" min="40" max="150" /></div>
     </div>
-    <div class="field"><label>FTP (watts)</label><input type="number" id="p-ftp" min="100" max="500" /><div class="field-hint">Leave blank to estimate from Strava HR data</div></div>
+    <div class="form-row">
+      <div class="field"><label>FTP (watts)</label><input type="number" id="p-ftp" min="100" max="500" /><div class="field-hint">Leave blank to estimate from ride data</div></div>
+      <div class="field"><label>Max Heart Rate</label><input type="number" id="p-max-hr" min="130" max="220" /><div class="field-hint">Used for HR zone calculations</div></div>
+    </div>
     <div class="field"><label>Hours per week</label>
       <select id="p-hours">
         <option value="4">4–6 hours</option>
@@ -1402,11 +1405,11 @@ function updateZones() {
   const weight = userProfile?.weight || 80;
   // Don't bail — even without FTP we can compute HR zones from wahoo_max_hr
 
-  // Use real Wahoo max HR if available, otherwise estimate from FTP
+  // Max HR priority: manually entered > Wahoo profile > estimated from FTP
+  const manualMaxHR = userProfile?.manual_max_hr || 0;
   const wahooMaxHR = userProfile?.wahoo_max_hr || 0;
-  const stravaMaxHR = parseInt(document.getElementById('d-ftp-sub')?.textContent?.match(/max HR (\d+)/)?.[1]) || 0;
-  const estMaxHR = wahooMaxHR || stravaMaxHR || (ftp ? Math.round(ftp / 1.22) : 175);
-  const maxHRSource = wahooMaxHR ? 'from Wahoo profile' : (stravaMaxHR ? 'from Strava data' : 'estimated from FTP');
+  const estMaxHR = manualMaxHR || wahooMaxHR || (ftp ? Math.round(ftp / 1.22) : 175);
+  const maxHRSource = manualMaxHR ? 'manually set' : (wahooMaxHR ? 'from Wahoo profile' : 'estimated from FTP');
 
   // Use real Wahoo power zones if available, otherwise derive from FTP
   const wahooZones = userProfile?.wahoo_power_zones;
@@ -1530,6 +1533,8 @@ function loadProfileTab() {
   document.getElementById('p-age').value = p.age || '';
   document.getElementById('p-weight').value = p.weight || '';
   document.getElementById('p-ftp').value = p.ftp || '';
+  const maxHrEl = document.getElementById('p-max-hr');
+  if (maxHrEl) maxHrEl.value = p.wahoo_max_hr || p.manual_max_hr || '';
   document.getElementById('p-hours').value = p.hours_per_week || '10';
   document.getElementById('p-power').value = p.has_power_meter || 'no';
   document.getElementById('p-experience').value = p.experience || 'intermediate';
@@ -1542,7 +1547,7 @@ function loadProfileTab() {
   const goalLabels = { uci_qualifier:'UCI Gran Fondo Worlds Qualifier', gran_fondo:'Gran Fondo', fitness:'General Fitness', century:'Century Ride' };
   const days = p.goal_date ? Math.ceil((new Date(p.goal_date)-new Date())/86400000) : null;
   document.getElementById('profile-display').innerHTML = 
-    `<strong>${p.name||'Athlete'}</strong> · Age ${p.age||'?'} · ${p.weight||'?'}kg · FTP ${p.ftp||'est.'}W<br>
+    `<strong>${p.name||'Athlete'}</strong> · Age ${p.age||'?'} · ${p.weight||'?'}kg · FTP ${p.ftp||'est.'}W · Max HR ${p.manual_max_hr||p.wahoo_max_hr||'est.'}bpm<br>
     <strong>Goal:</strong> ${goalLabels[p.goal_type]||'not set'}${p.goal_event?' — '+p.goal_event:''}<br>
     ${p.goal_date?'<strong>Event date:</strong> '+new Date(p.goal_date).toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})+(days>0?' ('+days+' days away)':''):'No event date set'}`;
 }
@@ -1554,6 +1559,7 @@ async function saveProfileEdits() {
     age: parseInt(document.getElementById('p-age').value) || null,
     weight: parseFloat(document.getElementById('p-weight').value) || null,
     ftp: parseInt(document.getElementById('p-ftp').value) || null,
+    manual_max_hr: parseInt(document.getElementById('p-max-hr')?.value) || null,
     hours_per_week: parseInt(document.getElementById('p-hours').value) || null,
     has_power_meter: document.getElementById('p-power').value,
     experience: document.getElementById('p-experience').value,
@@ -2392,7 +2398,7 @@ function buildSystemPrompt() {
 
   // Training zones for system prompt — compute inline as fallback if updateZones hasn't run yet
   const ftp = p.ftp || 0;
-  const maxHR = p._estMaxHR || p.wahoo_max_hr || (ftp ? Math.round(ftp / 1.22) : 175);
+  const maxHR = p._estMaxHR || p.manual_max_hr || p.wahoo_max_hr || (ftp ? Math.round(ftp / 1.22) : 175);
   const hz = p._computedHRZones || (maxHR ? [
     { id:'z1', hLo:0,                           hHi:Math.round(maxHR*0.60) },
     { id:'z2', hLo:Math.round(maxHR*0.61),       hHi:Math.round(maxHR*0.72) },
