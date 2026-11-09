@@ -746,10 +746,12 @@ window.addEventListener('load', async () => {
 
 sb.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_IN' && session) {
-    // Avoid reloading if already loaded for this user
-    if (currentUser?.id === session.user.id && userProfile) return;
+    // Avoid duplicate loads — guard against repeated SIGNED_IN fires (Supabase fires 2-3x on startup)
+    if (currentUser?.id === session.user.id && (userProfile || window._profileLoading)) return;
     currentUser = session.user;
+    window._profileLoading = true;
     await loadProfile();
+    window._profileLoading = false;
   } else if (event === 'SIGNED_OUT') {
     currentUser = null;
     userProfile = null;
@@ -2060,13 +2062,16 @@ async function openWahooRide(id) {
     } catch(e) { console.error('[VAMIQ] detail fetch error:', e); }
   }
 
+  // For indoor rides, show map placeholder but still fetch FIT for HR/power/cadence
   if (ride.workout_type_id === 12) {
     document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">Indoor ride — no GPS</div>';
-    return;
+    // Fall through to fetch FIT data if available (for HR/power/cadence coach context)
   }
 
   if (!fitUrl) {
-    document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">No route data available</div>';
+    if (ride.workout_type_id !== 12) {
+      document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">No route data available</div>';
+    }
     return;
   }
 
@@ -2165,14 +2170,16 @@ ${hrZoneText}${powerZoneText}${cadenceText}`;
       });
     }
 
-    // Route map
-    if (data.latlng?.length > 5) {
-      leafletMap = L.map('route-map', { zoomControl:false, attributionControl:false });
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(leafletMap);
-      const polyline = L.polyline(data.latlng, { color: '#FC4C02', weight: 3 }).addTo(leafletMap);
-      leafletMap.fitBounds(polyline.getBounds(), { padding: [10,10] });
-    } else {
-      document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">No GPS data in this ride</div>';
+    // Route map (skip for indoor rides)
+    if (ride.workout_type_id !== 12) {
+      if (data.latlng?.length > 5) {
+        leafletMap = L.map('route-map', { zoomControl:false, attributionControl:false });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(leafletMap);
+        const polyline = L.polyline(data.latlng, { color: '#FC4C02', weight: 3 }).addTo(leafletMap);
+        leafletMap.fitBounds(polyline.getBounds(), { padding: [10,10] });
+      } else {
+        document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">No GPS data in this ride</div>';
+      }
     }
 
     // Elevation profile
