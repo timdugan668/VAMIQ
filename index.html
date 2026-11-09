@@ -244,9 +244,10 @@ select:focus { border-color:var(--orange); }
 /* Ride detail modal */
 .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:1000; display:flex; align-items:flex-end; justify-content:center; }
 .modal { background:var(--asphalt); border-radius:16px 16px 0 0; width:100%; max-width:720px; max-height:90vh; overflow-y:auto; padding:1.5rem; }
-.modal-zone-toggle { display:flex; gap:4px; margin-bottom:8px; }
-.modal-ztab { flex:1; padding:6px; font-size:11px; font-weight:600; text-align:center; border:none; border-radius:var(--r); cursor:pointer; background:var(--gravel); color:var(--mist); }
-.modal-ztab.active { background:var(--orange); color:#fff; }
+.modal-section-tabs { display:flex; gap:0; overflow-x:auto; margin:-0.5rem -1.5rem 1rem; padding:0 1.5rem; border-bottom:1px solid var(--gravel); scrollbar-width:none; }
+.modal-section-tabs::-webkit-scrollbar { display:none; }
+.modal-stab { flex:none; padding:8px 14px; font-size:12px; font-weight:500; color:var(--mist); background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; white-space:nowrap; }
+.modal-stab.active { color:var(--orange); border-bottom-color:var(--orange); }
 .modal-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1rem; }
 .modal-title { font-size:16px; font-weight:600; }
 .modal-close { background:var(--gravel); border:none; color:var(--fog); width:32px; height:32px; border-radius:50%; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
@@ -2048,11 +2049,10 @@ async function openWahooRide(id) {
   // Clear map/charts
   if (leafletMap) { leafletMap.remove(); leafletMap = null; }
   document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">Loading route...</div>';
-  document.getElementById('elev-section').style.display = 'none';
-  document.getElementById('zones-section').style.display = 'none';
-  document.getElementById('segments-section').style.display = 'none';
-  document.getElementById('ztab-power').style.display = 'none';
-  showZoneTab('hr');
+  document.getElementById('streams-section').style.display = 'none';
+  // Reset modal tabs — hide all section tabs initially
+  ['map','elev','hr','seg'].forEach(t => { const el = document.getElementById('modal-tab-'+t); if(el) el.style.display='none'; });
+  showModalSection('overview', document.querySelector('.modal-stab'));
 
   // Set coach context
   window.CURRENT_RIDE_CONTEXT = 'Wahoo ride: '+ride.name+', '+date+', Duration: '+duration+(isIndoor?', Indoor trainer':', Distance: '+km+'km, Elevation: '+elev+'m')+', Avg HR: '+hr+' bpm'+(maxHR?', Max HR: '+maxHR+' bpm':'')+', Cadence: '+cad+' rpm, Calories: '+cal+' kcal'+(power?', Avg power: '+power+'W':'');
@@ -2203,10 +2203,6 @@ async function openWahooRide(id) {
       const sampled = data.heartrate.filter((_,i) => i % sampleEvery === 0);
       trendText += '\nHR trend (1 sample/min): ' + sampled.join(',') + ' bpm';
     }
-    if (data.cadence?.length > sampleEvery) {
-      const sampled = data.cadence.filter((_,i) => i % sampleEvery === 0);
-      trendText += '\nCadence trend (1 sample/min): ' + sampled.join(',') + ' rpm';
-    }
 
     // Build full coach context
     window.CURRENT_RIDE_CONTEXT = `DETAILED RIDE ANALYSIS REQUEST:
@@ -2245,11 +2241,11 @@ ${hrZoneText}${powerZoneText}${cadenceText}${climbText}${trendText}`;
 
     // Elevation profile
     if (data.altitude?.length > 5) {
-      document.getElementById('elev-section').style.display = '';
+      document.getElementById('modal-tab-elev').style.display = '';
       drawElevation(data.altitude);
     }
 
-    // HR zones bar
+    // HR zones bar (uses real Wahoo max HR if available)
     if (data.heartrate?.length > 5) {
       const hrData = data.heartrate;
       const realMaxHR = userProfile?._estMaxHR || Math.round(ftp * 1.22);
@@ -2259,7 +2255,7 @@ ${hrZoneText}${powerZoneText}${cadenceText}${climbText}${trendText}`;
       const counts = [0,0,0,0,0];
       hrData.forEach(h => { for(let i=0;i<zoneBounds.length;i++){if(h<=zoneBounds[i]){counts[i]++;break;}} });
       const total = hrData.length || 1;
-      document.getElementById('zones-section').style.display = '';
+      document.getElementById('modal-tab-hr').style.display = '';
       document.getElementById('hr-zones-bar').innerHTML = zoneColors.map((c,i) =>
         '<div style="flex:'+counts[i]+';background:'+c+';min-width:'+(counts[i]>0?'2px':'0')+'"></div>'
       ).join('');
@@ -2268,25 +2264,29 @@ ${hrZoneText}${powerZoneText}${cadenceText}${climbText}${trendText}`;
       ).join(' · ');
     }
 
-    // Power zones bar
-    if (data.power?.length > 5 && userProfile?.ftp) {
-      const pz = userProfile._computedPowerZones;
-      if (pz) {
-        const moving = data.power.filter(w => w > 0);
-        const pzColors = ['#4CAF7D','#2D9B6A','#E8C30A','#E8A20A','#E84040','#C0392B'];
-        const counts = new Array(pz.length).fill(0);
-        moving.forEach(w => { for(let i=0;i<pz.length;i++){if(!pz[i].pHi||w<=pz[i].pHi){counts[i]++;break;}} });
-        const total = moving.length || 1;
-        document.getElementById('ztab-power').style.display = '';
-        document.getElementById('power-zones-bar').innerHTML = pz.map((_,i) =>
-          '<div style="flex:'+counts[i]+';background:'+pzColors[i]+';min-width:'+(counts[i]>0?'2px':'0')+'"></div>'
-        ).join('');
-        document.getElementById('power-zones-legend').innerHTML = pz.map((z,i) =>
-          '<span style="color:'+pzColors[i]+'">'+z.id+': '+Math.round(counts[i]/total*100)+'%</span>'
-        ).join(' · ');
+    // Streams stats
+    if (data.speed?.length || data.cadence?.length || data.power?.length) {
+      document.getElementById('streams-section').style.display = 'block';
+      const streamStats = [];
+      if (data.speed?.length) {
+        const avgSpd = data.speed.filter(v=>v>0).reduce((a,b)=>a+b,0) / data.speed.filter(v=>v>0).length;
+        streamStats.push({ val: avgSpd.toFixed(1)+' km/h', lbl: 'Avg speed' });
+        streamStats.push({ val: Math.max(...data.speed).toFixed(1)+' km/h', lbl: 'Max speed' });
       }
+      if (data.cadence?.length) {
+        const avgCad = Math.round(data.cadence.filter(v=>v>0).reduce((a,b)=>a+b,0)/data.cadence.filter(v=>v>0).length);
+        streamStats.push({ val: avgCad+' rpm', lbl: 'Avg cadence' });
+      }
+      if (data.power?.length) {
+        const avgPwr = Math.round(data.power.filter(v=>v>0).reduce((a,b)=>a+b,0)/data.power.filter(v=>v>0).length);
+        const maxPwr = Math.max(...data.power);
+        streamStats.push({ val: avgPwr+'W', lbl: 'Avg power' });
+        streamStats.push({ val: maxPwr+'W', lbl: 'Max power' });
+      }
+      document.getElementById('streams-stats').innerHTML = streamStats.map(s =>
+        '<div class="modal-stat"><div class="val">'+s.val+'</div><div class="lbl">'+s.lbl+'</div></div>'
+      ).join('');
     }
-
 
   } catch(e) {
     document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">Error loading route: '+e.message+'</div>';
@@ -3148,11 +3148,9 @@ async function openRide(activityId) {
   // Clear previous map
   if (leafletMap) { leafletMap.remove(); leafletMap = null; }
   document.getElementById('route-map').innerHTML = '';
-  document.getElementById('elev-section').style.display = 'none';
-  document.getElementById('zones-section').style.display = 'none';
-  document.getElementById('segments-section').style.display = 'none';
-  document.getElementById('ztab-power').style.display = 'none';
-  showZoneTab('hr');
+  document.getElementById('streams-section').style.display = 'none';
+  ['map','elev','hr','seg'].forEach(t => { const el = document.getElementById('modal-tab-'+t); if(el) el.style.display='none'; });
+  showModalSection('overview', document.querySelector('.modal-stab'));
 
   try {
     const params = new URLSearchParams({
@@ -3203,6 +3201,7 @@ async function openRide(activityId) {
 
     // Route map using Leaflet + Strava polyline
     if (act.map?.summary_polyline) {
+      document.getElementById('modal-tab-map').style.display = '';
       leafletMap = L.map('route-map', { zoomControl:false, attributionControl:false });
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution:'© OpenStreetMap'
@@ -3217,7 +3216,7 @@ async function openRide(activityId) {
 
     // Elevation profile from streams
     if (streams.altitude?.data) {
-      document.getElementById('elev-section').style.display = '';
+      document.getElementById('modal-tab-elev').style.display = '';
       drawElevation(streams.altitude.data);
     }
 
@@ -3237,7 +3236,7 @@ async function openRide(activityId) {
         for (let i=0;i<zones.length;i++) { if(hr<=zones[i].max){counts[i]++;break;} }
       });
       const total = hrData.length || 1;
-      document.getElementById('zones-section').style.display = '';
+      document.getElementById('modal-tab-hr').style.display = '';
       document.getElementById('hr-zones-bar').innerHTML = zones.map((z,i) =>
         `<div style="flex:${counts[i]};background:${z.color};min-width:${counts[i]>0?'2px':'0'}"></div>`
       ).join('');
@@ -3248,6 +3247,7 @@ async function openRide(activityId) {
 
     // Segments
     if (act.segment_efforts?.length) {
+      document.getElementById('modal-tab-seg').style.display = '';
       const segs = act.segment_efforts.slice(0,10);
       document.getElementById('segments-list').innerHTML = segs.map(s => {
         const t = s.moving_time;
@@ -3283,6 +3283,20 @@ async function openRide(activityId) {
     if (streams.temp?.data) {
       const temps = streams.temp.data;
       streamStats.push({ val: Math.round(temps.reduce((a,b)=>a+b,0)/temps.length)+'°C', lbl: 'Avg temp' });
+    }
+    // Always show streams section if we have any data (especially for indoor/roller rides)
+    if (streamStats.length || act.average_cadence || act.average_watts) {
+      // Add summary stats if streams not available but activity has them
+      if (!streamStats.length) {
+        if (act.average_speed) streamStats.push({ val: (act.average_speed*3.6).toFixed(1)+' km/h', lbl: 'Avg speed' });
+        if (act.average_cadence) streamStats.push({ val: Math.round(act.average_cadence)+' rpm', lbl: 'Avg cadence' });
+        if (act.average_watts) streamStats.push({ val: Math.round(act.average_watts)+'W', lbl: 'Avg power' });
+        if (act.weighted_average_watts) streamStats.push({ val: Math.round(act.weighted_average_watts)+'W', lbl: 'Norm power' });
+      }
+      document.getElementById('streams-section').style.display = 'block';
+      document.getElementById('streams-stats').innerHTML = streamStats.map(s =>
+        `<div class="modal-stat"><div class="val" style="font-size:16px">${s.val}</div><div class="lbl">${s.lbl}</div></div>`
+      ).join('');
     }
 
   } catch(e) {
@@ -3461,11 +3475,15 @@ function decodePolyline(encoded) {
   return points;
 }
 
-function showZoneTab(tab) {
-  document.getElementById('hr-section').style.display = tab === 'hr' ? '' : 'none';
-  document.getElementById('power-section').style.display = tab === 'power' ? '' : 'none';
-  document.getElementById('ztab-hr').classList.toggle('active', tab === 'hr');
-  document.getElementById('ztab-power').classList.toggle('active', tab === 'power');
+function showModalSection(name, btn) {
+  ['overview','map','elevation','hr','segments'].forEach(s => {
+    const el = document.getElementById('modal-sec-' + s);
+    if (el) el.style.display = s === name ? '' : 'none';
+  });
+  document.querySelectorAll('.modal-stab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  // Leaflet needs invalidateSize when shown
+  if (name === 'map' && leafletMap) setTimeout(() => leafletMap.invalidateSize(), 50);
 }
 
 function closeModal(e) {
@@ -3478,6 +3496,8 @@ function closeModal(e) {
       show(window._modalFromTab === 'ask coach' ? 'coach' : window._modalFromTab, tabBtn);
       window._modalFromTab = null;
     }
+    // Reset section tabs for next open
+    showModalSection('overview', document.querySelector('.modal-stab'));
   }
 }
 
@@ -3607,27 +3627,36 @@ ${recentList}`;
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-stats" id="modal-stats"></div>
-    <div id="route-map"></div>
-    <div id="elev-section" style="display:none;margin-bottom:1rem">
-      <canvas id="elev-canvas" style="width:100%;height:80px;border-radius:var(--r);background:var(--gravel)"></canvas>
+    <div class="modal-section-tabs" id="modal-section-tabs">
+      <button class="modal-stab active" onclick="showModalSection('overview',this)">Overview</button>
+      <button class="modal-stab" onclick="showModalSection('map',this)" id="modal-tab-map" style="display:none">Map</button>
+      <button class="modal-stab" onclick="showModalSection('elevation',this)" id="modal-tab-elev" style="display:none">Elevation</button>
+      <button class="modal-stab" onclick="showModalSection('hr',this)" id="modal-tab-hr" style="display:none">HR Zones</button>
+      <button class="modal-stab" onclick="showModalSection('segments',this)" id="modal-tab-seg" style="display:none">Segments</button>
     </div>
-    <div id="zones-section" style="display:none;margin-top:1rem">
-      <div class="modal-zone-toggle">
-        <button class="modal-ztab active" id="ztab-hr" onclick="showZoneTab('hr')">HR Zones</button>
-        <button class="modal-ztab" id="ztab-power" onclick="showZoneTab('power')" style="display:none">Power Zones</button>
+    <div id="modal-sec-overview"></div>
+    <div id="modal-sec-map" style="display:none">
+      <div id="route-map"></div>
+    </div>
+    <div id="modal-sec-elevation" style="display:none">
+      <div id="elev-section">
+        <canvas id="elev-canvas" style="width:100%;height:80px;border-radius:var(--r);background:var(--gravel)"></canvas>
       </div>
+    </div>
+    <div id="modal-sec-hr" style="display:none">
       <div id="hr-section">
         <div class="hr-zones-bar" id="hr-zones-bar"></div>
         <div id="hr-zones-legend" style="display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--mist);margin-top:4px"></div>
       </div>
-      <div id="power-section" style="display:none">
-        <div class="hr-zones-bar" id="power-zones-bar"></div>
-        <div id="power-zones-legend" style="display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--mist);margin-top:4px"></div>
+    </div>
+    <div id="modal-sec-segments" style="display:none">
+      <div id="segments-section">
+        <div id="segments-list"></div>
       </div>
     </div>
-    <div id="segments-section" style="display:none;margin-top:1rem">
-      <p class="slabel">Segments</p>
-      <div id="segments-list"></div>
+    <div id="streams-section" style="display:none;margin-top:1rem">
+      <p class="slabel">Speed · Cadence · Power · Temperature</p>
+      <div id="streams-stats" class="modal-stats"></div>
     </div>
   </div>
 
