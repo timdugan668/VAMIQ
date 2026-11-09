@@ -2160,6 +2160,45 @@ async function openWahooRide(id) {
       if (moving.length > 0) cadenceText += ', <80rpm: '+Math.round(sub80/moving.length*100)+'%, ≥90rpm: '+Math.round(above90/moving.length*100)+'%';
     }
 
+    // Sampled time-series (1 reading per minute) for trend analysis
+    const sampleEvery = 30;
+    let trendText = '';
+    if (data.power?.length > sampleEvery) {
+      const sampled = data.power.filter((_,i) => i % sampleEvery === 0);
+      trendText += '\nPower trend (1 sample/30s, ' + sampled.length + ' points): ' + sampled.join(',') + 'W';
+    }
+    if (data.heartrate?.length > sampleEvery) {
+      const sampled = data.heartrate.filter((_,i) => i % sampleEvery === 0);
+      trendText += '\nHR trend (1 sample/30s, ' + sampled.length + ' points): ' + sampled.join(',') + ' bpm';
+    }
+    if (data.cadence?.length > sampleEvery) {
+      const sampled = data.cadence.filter((_,i) => i % sampleEvery === 0);
+      trendText += '\nCadence trend (1 sample/30s, ' + sampled.length + ' points): ' + sampled.join(',') + ' rpm';
+    }
+
+    // Climb analysis from altitude data
+    let climbText = '';
+    if (data.altitude?.length > 10 && !isIndoor) {
+      const alt = data.altitude;
+      const climbs = [];
+      let inClimb = false, climbStart = 0, climbGain = 0;
+      for (let i = 1; i < alt.length; i++) {
+        const gain = alt[i] - alt[i-1];
+        if (gain > 0) {
+          if (!inClimb) { inClimb = true; climbStart = i-1; climbGain = 0; }
+          climbGain += gain;
+        } else {
+          if (inClimb && climbGain >= 30) climbs.push({ gain: Math.round(climbGain), len: i - climbStart });
+          inClimb = false; climbGain = 0;
+        }
+      }
+      if (inClimb && climbGain >= 30) climbs.push({ gain: Math.round(climbGain), len: alt.length - climbStart });
+      if (climbs.length) {
+        const bigClimbs = climbs.sort((a,b) => b.gain - a.gain).slice(0, 5);
+        climbText = '\nClimbs (top 5 by gain): ' + bigClimbs.map((c,i) => `#${i+1}: ${c.gain}m gain (~${Math.round(c.len/60)}min)`).join(', ');
+      }
+    }
+
     // Build full coach context
     window.CURRENT_RIDE_CONTEXT = `DETAILED RIDE ANALYSIS REQUEST:
 Ride: ${ride.name} on ${date}
@@ -2168,7 +2207,7 @@ Duration: ${duration}
 Avg HR: ${hr} bpm${fitMaxHR?', Max HR: '+fitMaxHR+' bpm':''}
 ${cad ? 'Avg cadence: '+cad+' rpm' : ''}${power ? '\nAvg power: '+power+'W' : ''}
 Calories: ${cal} kcal
-${hrZoneText}${powerZoneText}${cadenceText}`;
+${hrZoneText}${powerZoneText}${cadenceText}${climbText}${trendText}`;
 
     console.log('[VAMIQ] Rich coach context built, fitMaxHR:', fitMaxHR);
 
