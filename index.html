@@ -746,6 +746,8 @@ window.addEventListener('load', async () => {
 
 sb.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_IN' && session) {
+    // Avoid reloading if already loaded for this user
+    if (currentUser?.id === session.user.id && userProfile) return;
     currentUser = session.user;
     await loadProfile();
   } else if (event === 'SIGNED_OUT') {
@@ -892,8 +894,10 @@ async function loadProfile() {
 
 async function saveProfile(profile) {
   try {
-    console.log('Saving profile for user:', currentUser.id, profile);
-    const payload = { id: currentUser.id, ...profile, updated_at: new Date().toISOString() };
+    // Strip runtime-only computed properties (prefixed _) — these are not DB columns
+    const dbProfile = Object.fromEntries(Object.entries(profile).filter(([k]) => !k.startsWith('_')));
+    console.log('Saving profile for user:', currentUser.id);
+    const payload = { id: currentUser.id, ...dbProfile, updated_at: new Date().toISOString() };
     const { data, error } = await sb
       .from('profiles')
       .upsert(payload, { onConflict: 'id' })
