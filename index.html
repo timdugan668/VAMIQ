@@ -733,8 +733,13 @@ window.addEventListener('load', async () => {
     const { data: { session } } = await sb.auth.getSession();
     clearTimeout(timeout);
     if (session) {
-      currentUser = session.user;
-      await loadProfile();
+      // Only load if onAuthStateChange hasn't already started loading
+      if (!window._profileLoading && !userProfile) {
+        window._profileLoading = true;
+        currentUser = session.user;
+        await loadProfile();
+        window._profileLoading = false;
+      }
     } else {
       showScreen('auth');
     }
