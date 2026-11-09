@@ -746,10 +746,12 @@ window.addEventListener('load', async () => {
 
 sb.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_IN' && session) {
-    // Avoid duplicate loads — guard against repeated SIGNED_IN fires (Supabase fires 2-3x on startup)
-    if (currentUser?.id === session.user.id && (userProfile || window._profileLoading)) return;
-    currentUser = session.user;
+    // Avoid duplicate loads — Supabase fires SIGNED_IN 2-3x on startup.
+    // Check BEFORE setting currentUser so both concurrent fires are blocked.
+    if (window._profileLoading) return;
+    if (currentUser?.id === session.user.id && userProfile) return;
     window._profileLoading = true;
+    currentUser = session.user;
     await loadProfile();
     window._profileLoading = false;
   } else if (event === 'SIGNED_OUT') {
