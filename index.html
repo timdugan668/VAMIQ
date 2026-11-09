@@ -2287,29 +2287,6 @@ ${hrZoneText}${powerZoneText}${cadenceText}${climbText}${trendText}`;
       }
     }
 
-    // Streams stats
-    if (data.speed?.length || data.cadence?.length || data.power?.length) {
-      document.getElementById('streams-section').style.display = 'block';
-      const streamStats = [];
-      if (data.speed?.length) {
-        const avgSpd = data.speed.filter(v=>v>0).reduce((a,b)=>a+b,0) / data.speed.filter(v=>v>0).length;
-        streamStats.push({ val: avgSpd.toFixed(1)+' km/h', lbl: 'Avg speed' });
-        streamStats.push({ val: Math.max(...data.speed).toFixed(1)+' km/h', lbl: 'Max speed' });
-      }
-      if (data.cadence?.length) {
-        const avgCad = Math.round(data.cadence.filter(v=>v>0).reduce((a,b)=>a+b,0)/data.cadence.filter(v=>v>0).length);
-        streamStats.push({ val: avgCad+' rpm', lbl: 'Avg cadence' });
-      }
-      if (data.power?.length) {
-        const avgPwr = Math.round(data.power.filter(v=>v>0).reduce((a,b)=>a+b,0)/data.power.filter(v=>v>0).length);
-        const maxPwr = Math.max(...data.power);
-        streamStats.push({ val: avgPwr+'W', lbl: 'Avg power' });
-        streamStats.push({ val: maxPwr+'W', lbl: 'Max power' });
-      }
-      document.getElementById('streams-stats').innerHTML = streamStats.map(s =>
-        '<div class="modal-stat"><div class="val">'+s.val+'</div><div class="lbl">'+s.lbl+'</div></div>'
-      ).join('');
-    }
 
   } catch(e) {
     document.getElementById('route-map').innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--mist);font-size:13px">Error loading route: '+e.message+'</div>';
@@ -3306,20 +3283,6 @@ async function openRide(activityId) {
     if (streams.temp?.data) {
       const temps = streams.temp.data;
       streamStats.push({ val: Math.round(temps.reduce((a,b)=>a+b,0)/temps.length)+'°C', lbl: 'Avg temp' });
-    }
-    // Always show streams section if we have any data (especially for indoor/roller rides)
-    if (streamStats.length || act.average_cadence || act.average_watts) {
-      // Add summary stats if streams not available but activity has them
-      if (!streamStats.length) {
-        if (act.average_speed) streamStats.push({ val: (act.average_speed*3.6).toFixed(1)+' km/h', lbl: 'Avg speed' });
-        if (act.average_cadence) streamStats.push({ val: Math.round(act.average_cadence)+' rpm', lbl: 'Avg cadence' });
-        if (act.average_watts) streamStats.push({ val: Math.round(act.average_watts)+'W', lbl: 'Avg power' });
-        if (act.weighted_average_watts) streamStats.push({ val: Math.round(act.weighted_average_watts)+'W', lbl: 'Norm power' });
-      }
-      document.getElementById('streams-section').style.display = 'block';
-      document.getElementById('streams-stats').innerHTML = streamStats.map(s =>
-        `<div class="modal-stat"><div class="val" style="font-size:16px">${s.val}</div><div class="lbl">${s.lbl}</div></div>`
-      ).join('');
     }
 
   } catch(e) {
