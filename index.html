@@ -1626,8 +1626,11 @@ async function saveWahooTokens(newAccessToken, newRefreshToken) {
   if (newRefreshToken) userProfile.wahoo_refresh_token = newRefreshToken;
   console.log('[VAMIQ] Saving refreshed Wahoo tokens to Supabase');
   try {
-    const { data: { session } } = await sb.auth.getSession();
-    const authToken = session?.access_token;
+    let authToken = SUPABASE_KEY;
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session?.access_token) authToken = session.access_token;
+    } catch(e) {}
     await fetch(
       'https://cjonjfzpqtjpvrabjkla.supabase.co/rest/v1/profiles?id=eq.' + currentUser.id,
       {
@@ -1635,7 +1638,7 @@ async function saveWahooTokens(newAccessToken, newRefreshToken) {
         headers: {
           'Content-Type': 'application/json',
           'apikey': SUPABASE_KEY,
-          'Authorization': 'Bearer ' + (authToken || SUPABASE_KEY),
+          'Authorization': 'Bearer ' + authToken,
           'Prefer': 'return=minimal'
         },
         body: JSON.stringify({
@@ -1689,7 +1692,8 @@ async function syncWahoo() {
       btn.textContent = '✓ Synced';
       hideSyncError();
       setTimeout(() => { btn.textContent = '↻ Sync'; btn.disabled = false; }, 3000);
-      // Fetch zones once per session
+      // Re-run zones after sync (may have new FTP estimate), and fetch Wahoo zones once per session
+      updateZones();
       if (!window._wahooZonesFetched) {
         window._wahooZonesFetched = true;
         fetchWahooZones();
@@ -2385,10 +2389,25 @@ function buildSystemPrompt() {
 
   const rideContext = window.CURRENT_RIDE_CONTEXT ? ("\n\n" + window.CURRENT_RIDE_CONTEXT) : "";
 
-  // Training zones for system prompt
-  const maxHR = p._estMaxHR || Math.round((p.ftp||200) / 1.22);
-  const hz = p._computedHRZones;
-  const pz = p._computedPowerZones;
+  // Training zones for system prompt — compute inline as fallback if updateZones hasn't run yet
+  const ftp = p.ftp || 0;
+  const maxHR = p._estMaxHR || p.wahoo_max_hr || (ftp ? Math.round(ftp / 1.22) : 175);
+  const hz = p._computedHRZones || (maxHR ? [
+    { id:'z1', hLo:0,                           hHi:Math.round(maxHR*0.60) },
+    { id:'z2', hLo:Math.round(maxHR*0.61),       hHi:Math.round(maxHR*0.72) },
+    { id:'z3', hLo:Math.round(maxHR*0.73),       hHi:Math.round(maxHR*0.83) },
+    { id:'z4', hLo:Math.round(maxHR*0.84),       hHi:Math.round(maxHR*0.94) },
+    { id:'z5', hLo:Math.round(maxHR*0.95),       hHi:Math.round(maxHR*1.00) },
+    { id:'z6', hLo:Math.round(maxHR*1.00),       hHi:null },
+  ] : null);
+  const pz = p._computedPowerZones || (ftp ? [
+    { id:'z1', pLo:0,                            pHi:Math.round(ftp*0.55) },
+    { id:'z2', pLo:Math.round(ftp*0.56),          pHi:Math.round(ftp*0.75) },
+    { id:'z3', pLo:Math.round(ftp*0.76),          pHi:Math.round(ftp*0.90) },
+    { id:'z4', pLo:Math.round(ftp*0.91),          pHi:Math.round(ftp*1.05) },
+    { id:'z5', pLo:Math.round(ftp*1.06),          pHi:Math.round(ftp*1.20) },
+    { id:'z6', pLo:Math.round(ftp*1.21),          pHi:null },
+  ] : null);
   let zonesText = '';
   if (hz) {
     zonesText += `\n\nATHLETE TRAINING ZONES (use these for all coaching — do not estimate):
@@ -2401,7 +2420,7 @@ HR zones (max HR ${maxHR} bpm):
   Z6 Anaerobic: >${hz[5].hLo} bpm`;
   }
   if (pz) {
-    zonesText += `\nPower zones (FTP ${p.ftp||'unknown'}W):
+    zonesText += `\nPower zones (FTP ${ftp||'unknown'}W):
   Z1 Recovery: <${pz[0].pHi}W
   Z2 Endurance: ${pz[1].pLo}–${pz[1].pHi}W
   Z3 Tempo: ${pz[2].pLo}–${pz[2].pHi}W
