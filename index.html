@@ -745,16 +745,19 @@ window.addEventListener('load', async () => {
 });
 
 sb.auth.onAuthStateChange(async (event, session) => {
-  if (event === 'SIGNED_IN' && session) {
-    // Avoid duplicate loads — Supabase fires SIGNED_IN 2-3x on startup.
-    // Check BEFORE setting currentUser so both concurrent fires are blocked.
+  console.log('[VAMIQ] auth event:', event, 'userId:', session?.user?.id, 'currentUser:', currentUser?.id, 'loading:', window._profileLoading, 'hasProfile:', !!userProfile);
+  // Handle both INITIAL_SESSION and SIGNED_IN — Supabase fires both on startup
+  if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+    // Guard: if already loading or already loaded for this user, skip
     if (window._profileLoading) return;
     if (currentUser?.id === session.user.id && userProfile) return;
+    // Set flag synchronously before any await — this is the critical line
     window._profileLoading = true;
     currentUser = session.user;
     await loadProfile();
     window._profileLoading = false;
   } else if (event === 'SIGNED_OUT') {
+    window._profileLoading = false;
     currentUser = null;
     userProfile = null;
     showScreen('auth');
