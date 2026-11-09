@@ -1419,14 +1419,16 @@ function updateZones() {
 
   let powerZones;
   if (parsedWahooZones && parsedWahooZones.length >= 5) {
-    // Map Wahoo zone structure to our display format
+    // Handle both normalised {pLo,pHi} format and raw Wahoo field names
     powerZones = parsedWahooZones.map((z, i) => ({
       id: 'z' + (i + 1),
-      pLo: z.min_power || z.minimum || 0,
-      pHi: z.max_power || z.maximum || null
+      pLo: z.pLo ?? z.min_power ?? z.minimum ?? z.min ?? z.power_min ?? 0,
+      pHi: z.pHi ?? z.max_power ?? z.maximum ?? z.max ?? z.power_max ?? null,
     }));
-    // Ensure z6 exists
-    if (powerZones.length === 6 && powerZones[5].pHi) powerZones[5].pHi = null;
+    // Ensure last zone has no upper bound
+    if (powerZones[powerZones.length-1].pHi !== null && powerZones[powerZones.length-1].pHi !== undefined) {
+      powerZones[powerZones.length-1].pHi = null;
+    }
   } else {
     powerZones = [
       { id: 'z1', pLo: 0,              pHi: Math.round(ftp * 0.55) },
@@ -1687,8 +1689,8 @@ async function syncWahoo() {
       btn.textContent = '✓ Synced';
       hideSyncError();
       setTimeout(() => { btn.textContent = '↻ Sync'; btn.disabled = false; }, 3000);
-      // Fetch zones once per session (skip if already loaded)
-      if (!userProfile.wahoo_max_hr && !window._wahooZonesFetched) {
+      // Fetch zones once per session
+      if (!window._wahooZonesFetched) {
         window._wahooZonesFetched = true;
         fetchWahooZones();
       }
@@ -1728,11 +1730,15 @@ async function fetchWahooZones() {
     console.log('[VAMIQ] Wahoo user profile:', JSON.stringify(uData).substring(0, 300));
     if (uData.new_access_token) await saveWahooTokens(uData.new_access_token, uData.new_refresh_token);
 
+    // Log full raw responses so we can verify field names
+    console.log('[VAMIQ] RAW power_zones response:', JSON.stringify(pData));
+    console.log('[VAMIQ] RAW user response:', JSON.stringify(uData));
+
     // Extract and store what we need
     const updates = {};
 
-    // Max HR from user profile
-    const wahooMaxHR = uData.max_heart_rate || uData.heart_rate_maximum || null;
+    // Max HR from user profile — try all known Wahoo field names
+    const wahooMaxHR = uData.max_heart_rate || uData.heart_rate_maximum || uData.heartRateMaximum || null;
     if (wahooMaxHR) {
       userProfile.wahoo_max_hr = wahooMaxHR;
       updates.wahoo_max_hr = wahooMaxHR;
@@ -1745,12 +1751,19 @@ async function fetchWahooZones() {
       updates.ftp = uData.ftp;
     }
 
-    // Power zones — store as array of {min, max} watt boundaries
-    const rawZones = pData.power_zones || pData.zones || pData;
+    // Power zones — try all known wrapper field names
+    const rawZones = pData.power_zones || pData.zones || (Array.isArray(pData) ? pData : null);
+    console.log('[VAMIQ] rawZones extracted:', JSON.stringify(rawZones));
     if (Array.isArray(rawZones) && rawZones.length > 0) {
-      userProfile.wahoo_power_zones = rawZones;
-      updates.wahoo_power_zones = JSON.stringify(rawZones);
-      console.log('[VAMIQ] Wahoo power zones stored:', rawZones.length, 'zones');
+      // Normalise each zone to {pLo, pHi} regardless of Wahoo field naming
+      const normalised = rawZones.map((z, i) => ({
+        pLo: z.min_power ?? z.minimum ?? z.min ?? z.power_min ?? 0,
+        pHi: z.max_power ?? z.maximum ?? z.max ?? z.power_max ?? null,
+      }));
+      if (normalised[normalised.length-1].pHi !== null) normalised[normalised.length-1].pHi = null;
+      userProfile.wahoo_power_zones = normalised;
+      updates.wahoo_power_zones = JSON.stringify(normalised);
+      console.log('[VAMIQ] Wahoo power zones normalised:', JSON.stringify(normalised));
     }
 
     // Persist to Supabase if we got anything useful
@@ -2360,6 +2373,8 @@ function updateDashboard(rides) {
 // ── CHAT ──
 function buildSystemPrompt() {
   const p = userProfile || {};
+  console.log('[VAMIQ] buildSystemPrompt — profile keys:', Object.keys(p));
+  console.log('[VAMIQ] zones in prompt — _computedHRZones:', !!p._computedHRZones, '_computedPowerZones:', !!p._computedPowerZones, 'wahoo_max_hr:', p.wahoo_max_hr, 'ftp:', p.ftp);
   const goalLabels = { uci_qualifier:'UCI Gran Fondo Worlds qualifier', gran_fondo:'Gran Fondo completion', fitness:'general fitness', century:'century ride (100km+)' };
   const days = p.goal_date ? Math.ceil((new Date(p.goal_date)-new Date())/86400000) : null;
 
